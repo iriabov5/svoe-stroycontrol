@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="580" viewBox="0 0 720 580">
+<rect width="720" height="580" fill="#f3f7ee"/>
+<g font-family="Arial,sans-serif" fill="#244b30"><text x="48" y="50" font-size="26" font-weight="700">Каркасный дом · 8 × 10 м</text><text x="48" y="80" font-size="15">Демонстрационный эскиз планировки</text>
+<g stroke="#3a6542" stroke-width="5" fill="#fff"><rect x="110" y="140" width="500" height="350"/><path d="M410 140v350M410 315h200M110 390h300"/></g>
+<g stroke="#a8bd9e" stroke-width="2" fill="none"><path d="M110 115h500M110 103v24M610 103v24M80 140v350M68 140h24M68 490h24"/></g>
+<text x="330" y="110" font-size="18">10 м</text><text x="58" y="330" font-size="18" transform="rotate(-90 58 330)">8 м</text>
+<text x="166" y="260" font-size="20">Кухня-гостиная</text><text x="459" y="225" font-size="20">Спальня 1</text><text x="459" y="405" font-size="20">Спальня 2</text><text x="170" y="446" font-size="18">Прихожая · санузел</text>
+<text x="110" y="535" font-size="14" fill="#586b59">Иллюстрация сценария сервиса, не рабочая проектная документация</text></g></svg>

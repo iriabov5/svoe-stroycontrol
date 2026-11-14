@@ -1,0 +1,5653 @@
+openapi: 3.1.2
+info:
+  title: СВОЁ СтройКонтроль
+  version: 0.1.0
+  description: |
+    Проект контракта первой итерации.
+    Запросы и ответы с данными аккаунта, карточки или CSRF-токеном не кешируются.
+    Для изменяющих операций сначала проверяется CSRF-токен, затем право доступа.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: Accounts
+    description: Регистрация, сессия и профиль аккаунта.
+  - name: Projects
+    description: Карточки домов и назначение подрядчика.
+  - name: Stages
+    description: План и фактический ход работ по дому.
+  - name: Preparation
+    description: Заявка, смета, договор и демонстрационная ипотека
+  - name: Collaboration
+    description: Ход работ, вопросы заказчику и повторное обращение к подрядчику
+  - name: Organizations
+    description: Профили, реквизиты и команда подрядчика
+  - name: Journal
+    description: Лента этапа и закрытые фото и документы
+  - name: Acceptance
+    description: Сдача, приёмка, демо-банк и завершение стройки
+paths:
+  /auth/csrf:
+    get:
+      tags:
+        - Accounts
+      operationId: getCsrfToken
+      summary: Получить CSRF-токен текущей сессии или создать анонимную сессию
+      security: []
+      responses:
+        "200":
+          description: Токен для заголовка X-CSRF-TOKEN и cookie сессии при её создании
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsrfToken"
+  /auth/register:
+    post:
+      tags:
+        - Accounts
+      operationId: register
+      summary: Зарегистрировать аккаунт
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              email: owner@example.test
+              password: example-password-123
+              role: CUSTOMER
+      responses:
+        "201":
+          description: Аккаунт создан. Для входа требуется отдельный запрос.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/CsrfError"
+        "409":
+          description: EMAIL_ALREADY_EXISTS — нормализованный email занят.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+  /auth/login:
+    post:
+      tags:
+        - Accounts
+      operationId: login
+      summary: Войти в аккаунт
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Профиль и cookie с новым ID сессии. Для следующих записей получить новый CSRF-токен.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: INVALID_CREDENTIALS — email или пароль не совпадают.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/CsrfError"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+  /auth/me:
+    get:
+      tags:
+        - Accounts
+      operationId: getCurrentAccount
+      summary: Получить профиль текущего аккаунта
+      responses:
+        "200":
+          description: Текущий аккаунт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+  /auth/logout:
+    post:
+      tags:
+        - Accounts
+      operationId: logout
+      summary: Завершить текущую сессию
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "204":
+          description: Сессия завершена. Для следующего входа получить новый CSRF-токен.
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/CsrfError"
+  /projects:
+    get:
+      tags:
+        - Projects
+      operationId: listProjects
+      summary: Получить доступные карточки
+      responses:
+        "200":
+          description: Список по убыванию времени создания и ID. При отсутствии карточек возвращается пустой
+            массив.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+    post:
+      tags:
+        - Projects
+      operationId: createProject
+      summary: Создать карточку дома
+      description: Доступно заказчику.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+            example:
+              name: Дом в Берёзовке
+              address: с. Берёзовка, ул. Центральная, 14
+      responses:
+        "201":
+          description: Карточка создана
+          headers:
+            Location:
+              required: true
+              description: Путь к новой карточке
+              schema:
+                type: string
+                format: uri-reference
+                example: /api/v1/projects/3ba4a366-cf94-45c2-9bd9-f5e1b2bd5df2
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+  /projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Projects
+      operationId: getProject
+      summary: Открыть карточку дома
+      description: Доступно владельцу и назначенному подрядчику.
+      responses:
+        "200":
+          description: Карточка дома
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+  /projects/{projectId}/contractor:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    put:
+      tags:
+        - Projects
+      operationId: assignContractor
+      summary: Назначить подрядчика
+      description: Доступно владельцу. Повтор для того же подрядчика возвращает текущее состояние.
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignContractorRequest"
+            example:
+              email: builder@example.test
+      responses:
+        "200":
+          description: Карточка с назначенным подрядчиком
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "409":
+          description: CONTRACTOR_ALREADY_ASSIGNED — уже назначен другой подрядчик.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          description: CONTRACTOR_NOT_FOUND — подходящий аккаунт подрядчика не найден.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/stages:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Stages
+      operationId: listStages
+      summary: Получить этапы в порядке плана
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Stage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401": &a1
+          $ref: "#/components/responses/AuthRequired"
+        "403": &a2
+          $ref: "#/components/responses/WriteForbidden"
+        "404": &a3
+          $ref: "#/components/responses/StageNotFound"
+    post:
+      tags:
+        - Stages
+      operationId: createStage
+      summary: Добавить этап в конец плана
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStageRequest"
+      responses:
+        "201":
+          description: Этап создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+          headers:
+            Location:
+              required: true
+              description: Путь к созданному этапу
+              schema:
+                type: string
+                format: uri-reference
+        "400":
+          description: VALIDATION_ERROR — неверные поля. INVALID_STAGE_DATES — недопустимые плановые даты.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401": *a1
+        "403": *a2
+        "404": *a3
+        "409":
+          description: APPROVED_PLAN_LOCKED — план формируется из согласованного предложения
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+      description: Прямое изменение плана доступно только проектам LEGACY. Для новых проектов план
+        составляет подрядчик внутри предложения.
+  /projects/{projectId}/stages/order:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    put:
+      tags:
+        - Stages
+      operationId: reorderStages
+      summary: Изменить полный порядок этапов
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderStagesRequest"
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Stage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/StageNotFound"
+        "409":
+          description: APPROVED_PLAN_LOCKED — план формируется из согласованного предложения
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+      description: Прямое изменение плана доступно только проектам LEGACY. Для новых проектов план
+        составляет подрядчик внутри предложения.
+  /projects/{projectId}/stages/{stageId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/StageId"
+    get:
+      tags:
+        - Stages
+      operationId: getStage
+      summary: Открыть этап
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401": &a4
+          $ref: "#/components/responses/AuthRequired"
+        "403": &a5
+          $ref: "#/components/responses/WriteForbidden"
+        "404": &a6
+          $ref: "#/components/responses/StageNotFound"
+    put:
+      tags:
+        - Stages
+      operationId: updateStagePlan
+      summary: Изменить плановые поля этапа
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStageRequest"
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+        "400":
+          description: VALIDATION_ERROR — неверные поля. INVALID_STAGE_DATES — недопустимые плановые даты.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401": *a4
+        "403": *a5
+        "404": *a6
+        "409":
+          description: APPROVED_PLAN_LOCKED — план формируется из согласованного предложения
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+      description: Прямое изменение плана доступно только проектам LEGACY. Для новых проектов план
+        составляет подрядчик внутри предложения.
+  /projects/{projectId}/stages/{stageId}/start:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/StageId"
+    post:
+      tags:
+        - Stages
+      operationId: startStage
+      summary: Начать работы по этапу
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StageCommand"
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/StageNotFound"
+        "409":
+          $ref: "#/components/responses/StageConflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+      description: Для новых проектов требуется согласованное предложение и договор подряда; иначе 409
+        CONTRACT_REQUIRED.
+  /projects/{projectId}/stages/{stageId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/StageId"
+    post:
+      tags:
+        - Stages
+      operationId: completeStage
+      summary: Завершить работы по этапу
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StageCommand"
+      responses:
+        "200":
+          description: Текущее состояние этапов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/StageNotFound"
+        "409":
+          $ref: "#/components/responses/StageConflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+  /projects/{projectId}/request:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Preparation
+      operationId: preparation1
+      summary: Получить заявку
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionRequest"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      tags:
+        - Preparation
+      operationId: preparation2
+      summary: Сохранить черновик заявки
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionRequest"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestPatch"
+  /projects/{projectId}/request/submit:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags:
+        - Preparation
+      operationId: preparation3
+      summary: Отправить заявку
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionRequest"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/proposals:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Preparation
+      operationId: preparation4
+      summary: "История: предложение"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      tags:
+        - Preparation
+      operationId: preparation5
+      summary: Подготовить предложение
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+  /projects/{projectId}/proposals/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Preparation
+      operationId: preparation6
+      summary: Просмотреть предложение
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      tags:
+        - Preparation
+      operationId: preparation7
+      summary: Сохранить предложение
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalEdit"
+  /projects/{projectId}/proposals/{documentId}/submit:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation8
+      summary: "submit: предложение"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/proposals/{documentId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation9
+      summary: "approve: предложение"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/proposals/{documentId}/request-changes:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation10
+      summary: "request-changes: предложение"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/contracts:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Preparation
+      operationId: preparation11
+      summary: "История: договор"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      tags:
+        - Preparation
+      operationId: preparation12
+      summary: Подготовить договор
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+  /projects/{projectId}/contracts/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Preparation
+      operationId: preparation13
+      summary: Просмотреть договор
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      tags:
+        - Preparation
+      operationId: preparation14
+      summary: Сохранить договор
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractEdit"
+  /projects/{projectId}/contracts/{documentId}/submit:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation15
+      summary: "submit: договор"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/contracts/{documentId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation16
+      summary: "approve: договор"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/contracts/{documentId}/request-changes:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Preparation
+      operationId: preparation17
+      summary: "request-changes: договор"
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionContract"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCommand"
+  /projects/{projectId}/mortgage-approval:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Preparation
+      operationId: preparation18
+      summary: Получить демо-сведения о кредите
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MortgageResult"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/mortgage-approval/import:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags:
+        - Preparation
+      operationId: preparation19
+      summary: Импортировать демо-одобрение
+      description: Проверяет доступ к проекту и состояние документа; черновик подрядчика скрыт от
+        заказчика. Банковские сведения доступны только владельцу.
+      responses:
+        "200":
+          description: Сохранённое состояние
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MortgageResult"
+        "400":
+          description: Ошибка полей
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Требуется вход
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Недостаточные права или CSRF
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Устаревшая версия или недопустимое состояние
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Демонстрационный банк недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MortgageImport"
+  /projects/{projectId}/stages/{stageId}/journal:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: &a7
+          type: string
+          format: uuid
+      - name: stageId
+        in: path
+        required: true
+        schema: *a7
+    get:
+      tags:
+        - Collaboration
+      operationId: collaboration1
+      summary: Лента этапа
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalPage"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: awaitingOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+    post:
+      tags:
+        - Collaboration
+      operationId: collaboration2
+      summary: Опубликовать ход работ, вопрос или запрос согласования
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат идентичного повтора
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "201":
+          description: Ресурс создан
+          headers:
+            Location:
+              description: Путь созданного ресурса
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalPublish"
+  /projects/{projectId}/stages/{stageId}/journal/{entryId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: *a7
+      - name: stageId
+        in: path
+        required: true
+        schema: *a7
+      - name: entryId
+        in: path
+        required: true
+        schema: *a7
+    get:
+      tags:
+        - Collaboration
+      operationId: collaboration3
+      summary: Получить запись этапа
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/stages/{stageId}/journal/{entryId}/response:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: *a7
+      - name: stageId
+        in: path
+        required: true
+        schema: *a7
+      - name: entryId
+        in: path
+        required: true
+        schema: *a7
+    post:
+      tags:
+        - Collaboration
+      operationId: collaboration4
+      summary: Ответить на вопрос или принять решение
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalAnswer"
+  /projects/{projectId}/proposals/{documentId}/reject:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: *a7
+      - name: documentId
+        in: path
+        required: true
+        schema: *a7
+    post:
+      tags:
+        - Collaboration
+      operationId: collaboration5
+      summary: Окончательно отклонить предложение
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProposal"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalRejection"
+  /projects/{projectId}/request/reissue:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: *a7
+    post:
+      tags:
+        - Collaboration
+      operationId: collaboration6
+      summary: Создать копию заявки другому подрядчику
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат идентичного повтора
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "201":
+          description: Ресурс создан
+          headers:
+            Location:
+              description: Путь созданного ресурса
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReissueRequest"
+    get:
+      tags:
+        - Collaboration
+      operationId: collaboration7
+      summary: Получить ссылку на копию заявки — только владелец
+      description: Проверяются участие в проекте, принадлежность ресурса и роль. Изменения требуют CSRF.
+        Повтор с тем же ключом и телом возвращает первоначальный результат; изменённое тело — 409
+        IDEMPOTENCY_CONFLICT.
+      responses:
+        "200":
+          description: Результат
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReissueLink"
+        "400":
+          description: VALIDATION_ERROR — поля или курсор
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: AUTH_REQUIRED
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: FORBIDDEN / INVALID_CSRF_TOKEN
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Объект отсутствует или недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Конфликт версии, состояния, ответа или ключа повтора
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: CONTRACTOR_NOT_FOUND / INVALID_REISSUE_CONTRACTOR
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/profile:
+    patch:
+      tags:
+        - Organizations
+      operationId: updateProfile
+      summary: Сохранить имя своего профиля
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfilePatch"
+  /organizations/me:
+    get:
+      tags:
+        - Organizations
+      operationId: myOrganization
+      summary: Получить свой профиль организации
+      parameters: []
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyOrganization"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /organizations:
+    post:
+      tags:
+        - Organizations
+      operationId: createOrganization
+      summary: Создать организацию подрядчика
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Идентичный повтор
+          content: &a8
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "201":
+          description: Успех
+          content: *a8
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganization"
+  /organizations/{id}:
+    patch:
+      tags:
+        - Organizations
+      operationId: editOrganization
+      summary: Изменить реквизиты своей организации
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: &a9
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditOrganization"
+  /organizations/{id}/members:
+    get:
+      tags:
+        - Organizations
+      operationId: organizationMembers
+      summary: Участники своей организации
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationMember"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /organizations/{id}/members/{membershipId}:
+    patch:
+      tags:
+        - Organizations
+      operationId: editOrganizationMember
+      summary: Изменить должность сотрудника
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - name: membershipId
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditMember"
+    delete:
+      tags:
+        - Organizations
+      operationId: removeOrganizationMember
+      summary: Исключить сотрудника
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - name: membershipId
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+        - name: expectedVersion
+          in: query
+          required: true
+          schema: &a25
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        "204":
+          description: Успех
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /organizations/{id}/invitations:
+    post:
+      tags:
+        - Organizations
+      operationId: inviteOrganizationMember
+      summary: Пригласить личный аккаунт сотрудника
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Идентичный повтор
+          content: &a10
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "201":
+          description: Успех
+          content: *a10
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteMember"
+    get:
+      tags:
+        - Organizations
+      operationId: organizationInvitations
+      summary: Приглашения своей организации
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/invitations:
+    get:
+      tags:
+        - Organizations
+      operationId: myInvitations
+      summary: Мои ожидающие приглашения
+      parameters: []
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /organizations/invitations/{id}/accept:
+    post:
+      tags:
+        - Organizations
+      operationId: acceptInvitation
+      summary: "Решение по приглашению: accept"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VersionCommand"
+  /organizations/invitations/{id}/decline:
+    post:
+      tags:
+        - Organizations
+      operationId: declineInvitation
+      summary: "Решение по приглашению: decline"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VersionCommand"
+  /organizations/invitations/{id}/cancel:
+    post:
+      tags:
+        - Organizations
+      operationId: cancelInvitation
+      summary: "Решение по приглашению: cancel"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VersionCommand"
+  /projects/{id}/contractor-organization:
+    post:
+      tags:
+        - Organizations
+      operationId: connectProjectOrganization
+      summary: Подключить команду к прежней карточке
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectOrganization"
+  /projects/{id}/contractor-team:
+    get:
+      tags:
+        - Organizations
+      operationId: getProjectTeam
+      summary: Команда конкретной стройки
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTeam"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      tags:
+        - Organizations
+      operationId: updateProjectTeam
+      summary: Заменить команду конкретной стройки
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTeam"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditProjectTeam"
+  /projects/{id}/contractor-preview:
+    get:
+      tags:
+        - Organizations
+      operationId: previewProjectContractor
+      summary: Предпросмотр названия, ИНН и основного контакта
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: *a9
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+            maxLength: 320
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractorPreview"
+        "400":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Ошибка доступа, полей, версии, состояния или повтора по контракту
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/attachments:
+    post:
+      tags:
+        - Journal
+      summary: Загрузить закрытую фотографию или PDF до публикации записи
+      operationId: uploadAttachment
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: &a11
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: *a11
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - file
+                - purpose
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG/PNG/WebP до 10 МиБ либо PDF до 20 МиБ; содержимое проверяется сервером
+                stageId: *a11
+                purpose:
+                  type: string
+                  enum:
+                    - JOURNAL
+                    - BANK
+                  description: JOURNAL требует stageId и доступа Работы; BANK — собственника ипотечного проекта
+                caption:
+                  type: string
+                  maxLength: 300
+                  description: Для фото обязательна непустая подпись
+      responses:
+        "200":
+          description: Готовый файл либо повтор существующей загрузки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+        "400": &a12
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401": &a13
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403": &a14
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404": &a15
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409": &a16
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413": &a17
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503": &a18
+          description: Ошибка проверки, доступа, состояния или хранилища
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/attachments/{attachmentId}/content:
+    get:
+      tags:
+        - Journal
+      summary: Прочитать вложение с повторной проверкой прав участника
+      operationId: downloadAttachment
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: *a11
+        - in: path
+          name: attachmentId
+          required: true
+          schema: *a11
+      responses:
+        "200":
+          description: Фото inline или PDF attachment; Cache-Control no-store и nosniff
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400": *a12
+        "401": *a13
+        "403": *a14
+        "404": *a15
+        "409": *a16
+        "413": *a17
+        "503": *a18
+  /projects/{projectId}/stages/{stageId}/acceptance:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: &a19
+          type: string
+          format: uuid
+      - in: path
+        name: stageId
+        required: true
+        schema: *a19
+    get:
+      operationId: getAcceptance
+      tags:
+        - Acceptance
+      summary: Прочитать текущую сдачу и историю приёмки
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptancePage"
+        "400": &a20
+          description: Ошибка полей, доступа, состояния или версии
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401": &a21
+          description: Ошибка полей, доступа, состояния или версии
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403": &a22
+          description: Ошибка полей, доступа, состояния или версии
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404": &a23
+          description: Ошибка полей, доступа, состояния или версии
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409": &a24
+          description: Ошибка полей, доступа, состояния или версии
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      operationId: submitAcceptance
+      tags:
+        - Acceptance
+      summary: Передать завершённый этап на приёмку
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAcceptance"
+      responses:
+        "200":
+          description: Идентичный повтор
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptanceSubmission"
+        "201":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptanceSubmission"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/stages/{stageId}/acceptance/{submissionId}/decision:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: *a19
+      - in: path
+        name: stageId
+        required: true
+        schema: *a19
+      - in: path
+        name: submissionId
+        required: true
+        schema: *a19
+    post:
+      operationId: decideAcceptance
+      tags:
+        - Acceptance
+      summary: Принять сдачу или вернуть с замечаниями
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideAcceptance"
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptanceSubmission"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/stages/{stageId}/bank-confirmation:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: *a19
+      - in: path
+        name: stageId
+        required: true
+        schema: *a19
+    get:
+      operationId: getBankConfirmation
+      tags:
+        - Acceptance
+      summary: Владелец проверяет пакет подтверждения для демо-банка
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankConfirmation"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/stages/{stageId}/bank-confirmations:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: *a19
+      - in: path
+        name: stageId
+        required: true
+        schema: *a19
+    post:
+      operationId: sendBankConfirmation
+      tags:
+        - Acceptance
+      summary: Явно отправить принятую сдачу либо её дополнение в демо-банк
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendBankConfirmation"
+      responses:
+        "200":
+          description: Идентичный повтор
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStageSubmission"
+        "202":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStageSubmission"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/stages/{stageId}/bank-confirmations/{submissionId}/retry:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: *a19
+      - in: path
+        name: stageId
+        required: true
+        schema: *a19
+      - in: path
+        name: submissionId
+        required: true
+        schema: *a19
+    post:
+      operationId: retryBankConfirmation
+      tags:
+        - Acceptance
+      summary: Повторить доставку того же пакета с прежним банковским ключом
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryBankConfirmation"
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStageSubmission"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/completion:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: *a19
+    get:
+      operationId: getCompletion
+      tags:
+        - Acceptance
+      summary: Прочитать прогресс приёмки и возможность завершения стройки
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Completion"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+    post:
+      operationId: completeConstruction
+      tags:
+        - Acceptance
+      summary: Владелец подтверждает завершение полностью принятой стройки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCompletion"
+      responses:
+        "200":
+          description: Сохранённый результат операции
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Completion"
+        "400": *a20
+        "401": *a21
+        "403": *a22
+        "404": *a23
+        "409": *a24
+  /projects/{projectId}/bank-case:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: connectConstructionBankCase
+      tags:
+        - Acceptance
+      summary: С согласия владельца подключить синтетическое кредитное дело без изменения отправленной
+        заявки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectConstructionBankCase"
+      responses:
+        "200":
+          description: Подключённое либо ранее связанное демо-дело
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionBankCase"
+        "400":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Ошибка согласия, доступа, состояния или демо-банка
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+  parameters:
+    CsrfHeader:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StageId:
+      name: stageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    ValidationError:
+      description: VALIDATION_ERROR — неверный JSON, поле или параметр.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    AuthRequired:
+      description: AUTH_REQUIRED — требуется действующая сессия пользователя.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    CsrfError:
+      description: INVALID_CSRF_TOKEN — токен отсутствует или неверен.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    WriteForbidden:
+      description: FORBIDDEN — роль или участие не дают права на запись. INVALID_CSRF_TOKEN — токен
+        отсутствует или неверен.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ProjectNotFound:
+      description: PROJECT_NOT_FOUND — карточка отсутствует или скрыта от пользователя.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: UNSUPPORTED_MEDIA_TYPE — для тела запроса требуется application/json.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    StageNotFound:
+      description: PROJECT_NOT_FOUND — карточка недоступна. STAGE_NOT_FOUND — этап отсутствует или
+        относится к другой карточке.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    StageConflict:
+      description: STALE_STAGE_VERSION — данные уже изменены, загрузите актуальные.
+        INVALID_STAGE_TRANSITION — переход невозможен в текущем состоянии.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    InputEmail:
+      type: string
+      minLength: 3
+      maxLength: 320
+      description: После удаления пробелов по краям и приведения к нижнему регистру должен быть email
+        длиной не более 254 символов.
+      pattern: ^\s*[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+\s*$
+    Password:
+      type: string
+      writeOnly: true
+      minLength: 12
+      maxLength: 128
+      description: Проверяется и передаётся без обрезки пробелов или нормализации.
+    Role:
+      type: string
+      enum:
+        - CUSTOMER
+        - CONTRACTOR
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+        - role
+      properties:
+        email:
+          $ref: "#/components/schemas/InputEmail"
+        password:
+          $ref: "#/components/schemas/Password"
+        role:
+          $ref: "#/components/schemas/Role"
+        displayName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          $ref: "#/components/schemas/InputEmail"
+        password:
+          $ref: "#/components/schemas/Password"
+    CsrfToken:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          minLength: 1
+    Account:
+      type: object
+      required:
+        - id
+        - email
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        role:
+          $ref: "#/components/schemas/Role"
+        displayName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+        profileVersion: *a25
+        membership:
+          anyOf:
+            - $ref: "#/components/schemas/MembershipSummary"
+            - type: "null"
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - address
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: \S
+          description: Название. Пробелы по краям удаляются перед сохранением.
+        address:
+          type: string
+          minLength: 1
+          maxLength: 300
+          pattern: \S
+          description: Адрес свободным текстом. Пробелы по краям удаляются перед сохранением.
+    AssignContractorRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          $ref: "#/components/schemas/InputEmail"
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - address
+        - customerId
+        - contractorId
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 120
+        address:
+          type: string
+          maxLength: 300
+        customerId:
+          type: string
+          format: uuid
+        contractorId:
+          type:
+            - string
+            - "null"
+          format: uuid
+          description: UUID назначенного подрядчика или null до назначения.
+        createdAt:
+          type: string
+          format: date-time
+          description: Время создания карточки в UTC.
+        processMode:
+          type: string
+          enum:
+            - LEGACY
+            - PROPOSAL_REQUIRED
+        requestSubmitted:
+          type: boolean
+        approvedProposalId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        approvedContractId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        preparationClosed:
+          type: boolean
+        contractorOrganizationId:
+          anyOf:
+            - *a9
+            - type: "null"
+        contractorOrganization:
+          anyOf:
+            - $ref: "#/components/schemas/Organization"
+            - type: "null"
+        ownerPresentation:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        primaryContact:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        permissions:
+          $ref: "#/components/schemas/ProjectPermissions"
+        completedAt: &a60
+          type:
+            - string
+            - "null"
+          format: date-time
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - code
+      properties:
+        type:
+          type: string
+          const: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - EMAIL_ALREADY_EXISTS
+            - INVALID_CREDENTIALS
+            - AUTH_REQUIRED
+            - INVALID_CSRF_TOKEN
+            - FORBIDDEN
+            - PROJECT_NOT_FOUND
+            - CONTRACTOR_NOT_FOUND
+            - CONTRACTOR_ALREADY_ASSIGNED
+            - UNSUPPORTED_MEDIA_TYPE
+            - INVALID_STAGE_DATES
+            - STAGE_NOT_FOUND
+            - STALE_STAGE_VERSION
+            - INVALID_STAGE_TRANSITION
+            - PROPOSAL_NOT_FOUND
+            - CONTRACT_NOT_FOUND
+            - STALE_REQUEST_VERSION
+            - STALE_PROPOSAL_VERSION
+            - STALE_CONTRACT_VERSION
+            - INVALID_PROPOSAL_STATE
+            - INVALID_CONTRACT_STATE
+            - REQUEST_LOCKED
+            - CONTRACTOR_REQUIRED
+            - APPROVED_PLAN_LOCKED
+            - CONTRACT_REQUIRED
+            - BANK_DEMO_UNAVAILABLE
+            - IDEMPOTENCY_CONFLICT
+            - JOURNAL_ENTRY_NOT_FOUND
+            - JOURNAL_STAGE_STATE
+            - STALE_JOURNAL_VERSION
+            - JOURNAL_ALREADY_RESOLVED
+            - PREPARATION_CLOSED
+            - REQUEST_ALREADY_REISSUED
+            - INVALID_REISSUE_CONTRACTOR
+            - PROFILE_REQUIRED
+            - STALE_PROFILE_VERSION
+            - ORGANIZATION_NOT_FOUND
+            - INVITATION_NOT_FOUND
+            - STALE_ORGANIZATION_VERSION
+            - STALE_TEAM_VERSION
+            - MEMBERSHIP_CONFLICT
+            - ORGANIZATION_ALREADY_EXISTS
+            - INVALID_TEAM_MEMBER
+            - CONTRACTOR_PROFILE_REQUIRED
+            - ATTACHMENT_NOT_FOUND
+            - ATTACHMENT_NOT_READY
+            - ATTACHMENT_TOO_LARGE
+            - STORAGE_UNAVAILABLE
+            - ACCEPTANCE_NOT_FOUND
+            - STALE_ACCEPTANCE_VERSION
+            - INVALID_ACCEPTANCE_STATE
+            - CONSTRUCTION_NOT_READY
+            - CONSTRUCTION_COMPLETED
+            - BANK_CASE_REQUIRED
+            - STALE_BANK_VERSION
+            - INVALID_BANK_SUBMISSION_STATE
+        detail:
+          type: string
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+          description: Сообщения по именам полей API
+    StageWorkType:
+      type: string
+      enum:
+        - FOUNDATION
+        - WALLS
+        - ROOF
+        - UTILITIES
+        - FINISHING
+        - OTHER
+    StageStatus:
+      type: string
+      enum:
+        - PLANNED
+        - IN_PROGRESS
+        - WORK_COMPLETED
+    CreateStageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - workType
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: \S
+        workType:
+          $ref: "#/components/schemas/StageWorkType"
+        plannedStart:
+          type: &a26
+            - string
+            - "null"
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        plannedFinish:
+          type: *a26
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+    UpdateStageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - name
+        - workType
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: \S
+        workType:
+          $ref: "#/components/schemas/StageWorkType"
+        plannedStart:
+          type: &a27
+            - string
+            - "null"
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        plannedFinish:
+          type: *a27
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+    StageCommand:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    StageVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    ReorderStagesRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - stages
+      properties:
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageVersion"
+          description: Все этапы карточки без пропусков и повторов, в новом порядке.
+    Stage:
+      type: object
+      required:
+        - id
+        - projectId
+        - version
+        - position
+        - name
+        - workType
+        - status
+        - plannedStart
+        - plannedFinish
+        - actualStart
+        - actualFinish
+        - startOverdueDays
+        - finishOverdueDays
+        - startLateDays
+        - finishLateDays
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        position:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: \S
+        workType:
+          $ref: "#/components/schemas/StageWorkType"
+        plannedStart:
+          type: &a28
+            - string
+            - "null"
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        plannedFinish:
+          type: *a28
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        status:
+          $ref: "#/components/schemas/StageStatus"
+        actualStart:
+          type: *a28
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        actualFinish:
+          type: *a28
+          format: date
+          description: Календарная дата YYYY-MM-DD, год 0001–9999, или null.
+        startOverdueDays:
+          type: integer
+          minimum: 0
+          description: Текущая просрочка, если событие ещё не наступило; иначе 0.
+        finishOverdueDays:
+          type: integer
+          minimum: 0
+          description: Текущая просрочка, если событие ещё не наступило; иначе 0.
+        startLateDays:
+          type: integer
+          minimum: 0
+          description: Фактическое опоздание относительно плана; без события или плана 0.
+        finishLateDays:
+          type: integer
+          minimum: 0
+          description: Фактическое опоздание относительно плана; без события или плана 0.
+    ConstructionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        version: &a31
+          type: integer
+          minimum: 0
+        state:
+          type: string
+          enum:
+            - DRAFT
+            - SUBMITTED
+        description: &a32
+          type:
+            - string
+            - "null"
+          maxLength: 10000
+        technology: &a33
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        technologyRecommendation: &a34
+          type: boolean
+        materials: &a35
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+        materialsRecommendation: &a36
+          type: boolean
+        lengthM: &a29
+          type:
+            - number
+            - "null"
+          exclusiveMinimum: 0
+          maximum: 9999999999999.99
+        widthM: *a29
+        areaM2: *a29
+        floors: &a37
+          type:
+            - integer
+            - "null"
+          minimum: 1
+          maximum: 10
+        completionScope: &a38
+          type:
+            - string
+            - "null"
+          maxLength: 1000
+        desiredBudget: *a29
+        cadastralNumber: &a39
+          type:
+            - string
+            - "null"
+          maxLength: 50
+        desiredStart: &a30
+          type:
+            - string
+            - "null"
+          format: date
+        desiredFinish: *a30
+        financingSource: &a40
+          type:
+            - string
+            - "null"
+          enum:
+            - OWN_FUNDS
+            - RSHB_RURAL_MORTGAGE
+            - null
+        location: &a41
+          type: string
+        submittedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    RequestPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        description: *a32
+        technology: *a33
+        technologyRecommendation: *a34
+        materials: *a35
+        materialsRecommendation: *a36
+        lengthM: *a29
+        widthM: *a29
+        areaM2: *a29
+        floors: *a37
+        completionScope: *a38
+        desiredBudget: *a29
+        cadastralNumber: *a39
+        desiredStart: *a30
+        desiredFinish: *a30
+        financingSource: *a40
+      required:
+        - version
+    ProposalImage:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          maxLength: 2048
+        caption:
+          type: string
+          minLength: 1
+          maxLength: 300
+      required:
+        - url
+        - caption
+    ProposalStage:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 120
+        workType:
+          $ref: "#/components/schemas/StageWorkType"
+        expectedResult:
+          type: string
+          maxLength: 2000
+        plannedStart: *a30
+        plannedFinish: *a30
+      required:
+        - id
+        - name
+        - workType
+        - expectedResult
+        - plannedStart
+        - plannedFinish
+    ProposalEdit:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        estimateText: &a42
+          type: string
+          maxLength: 30000
+        termsText: &a43
+          type:
+            - string
+            - "null"
+          maxLength: 10000
+        totalPrice: *a29
+        images: &a44
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/ProposalImage"
+        stages: &a45
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ProposalStage"
+      required:
+        - version
+        - estimateText
+        - termsText
+        - totalPrice
+        - images
+        - stages
+    DocumentCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        comment:
+          type:
+            - string
+            - "null"
+          maxLength: 5000
+        contractorConfirmed:
+          type: boolean
+      required:
+        - version
+    Decision:
+      type: object
+      additionalProperties: false
+      properties:
+        actorId:
+          type: string
+          format: uuid
+        decision: *a41
+        comment:
+          type:
+            - string
+            - "null"
+        decidedAt:
+          type: string
+          format: date-time
+        actorSnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+    ConstructionProposal:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        estimateText: *a42
+        termsText: *a43
+        totalPrice: *a29
+        images: *a44
+        stages: *a45
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        revisionNo:
+          type: integer
+        state:
+          type: string
+          enum:
+            - DRAFT
+            - SUBMITTED
+            - CHANGES_REQUESTED
+            - APPROVED
+            - REJECTED
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        decision:
+          anyOf:
+            - $ref: "#/components/schemas/Decision"
+            - type: "null"
+        currency:
+          type: string
+          const: RUB
+        createdBySnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        submittedById:
+          anyOf:
+            - *a9
+            - type: "null"
+        submittedBySnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+      required:
+        - version
+        - estimateText
+        - termsText
+        - totalPrice
+        - images
+        - stages
+        - id
+        - projectId
+        - revisionNo
+        - state
+        - createdBy
+        - createdAt
+        - submittedAt
+        - decision
+        - currency
+    ContractEdit:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        contractText: &a46
+          type: string
+          maxLength: 50000
+      required:
+        - version
+        - contractText
+    ConstructionContract:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        contractText: *a46
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        proposalId:
+          type: string
+          format: uuid
+        revisionNo:
+          type: integer
+        state:
+          type: string
+          enum:
+            - DRAFT
+            - SUBMITTED
+            - CHANGES_REQUESTED
+            - APPROVED
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        decision:
+          anyOf:
+            - $ref: "#/components/schemas/Decision"
+            - type: "null"
+        createdBySnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        submittedById:
+          anyOf:
+            - *a9
+            - type: "null"
+        submittedBySnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+      required:
+        - version
+        - contractText
+        - id
+        - projectId
+        - proposalId
+        - revisionNo
+        - state
+        - createdBy
+        - createdAt
+        - submittedAt
+        - decision
+    MortgageImport:
+      type: object
+      additionalProperties: false
+      properties:
+        version: *a31
+        demoConsent:
+          type: boolean
+          const: true
+        idempotencyKey:
+          type: string
+          format: uuid
+      required:
+        - version
+        - demoConsent
+        - idempotencyKey
+    MortgageSnapshot:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        program: *a41
+        amount:
+          type: number
+        termMonths:
+          type: integer
+        rate:
+          type: number
+        decisionDate:
+          type: string
+          format: date
+        validUntil:
+          type: string
+          format: date
+        fetchedAt:
+          type: string
+          format: date-time
+        isDemo:
+          type: boolean
+          const: true
+      required:
+        - id
+        - program
+        - amount
+        - termMonths
+        - rate
+        - decisionDate
+        - validUntil
+        - fetchedAt
+        - isDemo
+    MortgageResult:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+            - NOT_CONNECTED
+            - FOUND
+            - NOT_FOUND
+            - EXPIRED
+        snapshot:
+          anyOf:
+            - $ref: "#/components/schemas/MortgageSnapshot"
+            - type: "null"
+      required:
+        - status
+        - snapshot
+    JournalPhoto:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - url
+        - caption
+      properties:
+        id: *a7
+        url:
+          type: string
+          format: uri
+        caption:
+          type: string
+    JournalKind:
+      type: string
+      enum:
+        - NOTE
+        - QUESTION
+        - APPROVAL
+    JournalResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - actorId
+        - text
+        - decision
+        - createdAt
+      properties:
+        actorId: *a7
+        text:
+          anyOf:
+            - type: string
+            - type: "null"
+        decision:
+          anyOf:
+            - type: string
+              enum:
+                - APPROVED
+                - DECLINED
+            - type: "null"
+        createdAt: &a47
+          type: string
+          format: date-time
+        authorSnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+    JournalEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - stageId
+        - kind
+        - status
+        - version
+        - text
+        - photos
+        - sourceEntryId
+        - author
+        - createdAt
+        - response
+      properties:
+        id: *a7
+        projectId: *a7
+        stageId: *a7
+        kind:
+          $ref: "#/components/schemas/JournalKind"
+        status:
+          type: string
+          enum:
+            - PUBLISHED
+            - PENDING
+            - ANSWERED
+            - APPROVED
+            - DECLINED
+        version: &a48
+          type: integer
+          minimum: 0
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalPhoto"
+        sourceEntryId:
+          anyOf:
+            - *a7
+            - type: "null"
+        author:
+          $ref: "#/components/schemas/Account"
+        createdAt: *a47
+        response:
+          anyOf:
+            - $ref: "#/components/schemas/JournalResponse"
+            - type: "null"
+        authorSnapshot:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+          maxItems: 10
+    JournalPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+        - awaitingCount
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalEntry"
+        nextCursor:
+          anyOf:
+            - type: string
+            - type: "null"
+        awaitingCount:
+          type: integer
+          minimum: 0
+    JournalPublish:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - text
+        - photos
+        - sourceEntryId
+        - idempotencyKey
+      properties:
+        kind:
+          $ref: "#/components/schemas/JournalKind"
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        photos:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/ProposalImage"
+        sourceEntryId:
+          anyOf:
+            - *a7
+            - type: "null"
+        idempotencyKey: *a7
+        attachmentIds:
+          type: array
+          items: *a11
+          uniqueItems: true
+          maxItems: 10
+          default: []
+    JournalAnswer:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - idempotencyKey
+        - text
+        - decision
+      properties:
+        version: *a48
+        idempotencyKey: *a7
+        text:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 5000
+            - type: "null"
+        decision:
+          anyOf:
+            - type: string
+              enum:
+                - APPROVED
+                - DECLINED
+            - type: "null"
+    ReissueRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - contractorEmail
+        - idempotencyKey
+      properties:
+        contractorEmail:
+          type: string
+          format: email
+          maxLength: 320
+        idempotencyKey: *a7
+    ReissueLink:
+      type: object
+      additionalProperties: false
+      required:
+        - targetProjectId
+      properties:
+        targetProjectId:
+          anyOf:
+            - *a7
+            - type: "null"
+    ProposalRejection:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - comment
+      properties:
+        version: *a48
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 5000
+    MembershipSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organizationId
+        - organizationName
+        - position
+        - role
+      properties:
+        id: *a9
+        organizationId: *a9
+        organizationName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        position:
+          type: string
+          minLength: 1
+          maxLength: 120
+        role:
+          type: string
+          enum:
+            - OWNER
+            - MEMBER
+    ProfilePatch:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - displayName
+      properties:
+        version: *a25
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 120
+    Organization:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ownerAccountId
+        - type
+        - displayName
+        - legalName
+        - inn
+        - address
+        - phone
+        - version
+      properties:
+        id: *a9
+        ownerAccountId: *a9
+        type: &a49
+          type: string
+          enum:
+            - LEGAL_ENTITY
+            - SOLE_TRADER
+        displayName: &a50
+          type: string
+          minLength: 1
+          maxLength: 160
+        legalName: &a51
+          type: string
+          minLength: 1
+          maxLength: 500
+        inn: &a52
+          type: string
+          pattern: ^[0-9]{10}([0-9]{2})?$
+        address: &a53
+          type: string
+          minLength: 1
+          maxLength: 500
+        phone: &a54
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        version: *a25
+    CreateOrganization:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - displayName
+        - legalName
+        - inn
+        - address
+        - idempotencyKey
+      properties:
+        type: *a49
+        displayName: *a50
+        legalName: *a51
+        inn: *a52
+        address: *a53
+        phone: *a54
+        idempotencyKey: *a9
+    EditOrganization:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - displayName
+        - legalName
+        - address
+        - phone
+      properties:
+        version: *a25
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 500
+        address:
+          type: string
+          minLength: 1
+          maxLength: 500
+        phone:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+    MyOrganization:
+      type: object
+      additionalProperties: false
+      required:
+        - organization
+        - membership
+      properties:
+        organization:
+          anyOf:
+            - $ref: "#/components/schemas/Organization"
+            - type: "null"
+        membership:
+          anyOf:
+            - $ref: "#/components/schemas/MembershipSummary"
+            - type: "null"
+    OrganizationMember:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organizationId
+        - accountId
+        - displayName
+        - email
+        - position
+        - role
+        - state
+        - version
+      properties:
+        id: *a9
+        organizationId: *a9
+        accountId: *a9
+        displayName: &a55
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+        email: &a56
+          type: string
+          format: email
+        position: &a57
+          type: string
+          minLength: 1
+          maxLength: 120
+        role: &a58
+          type: string
+          enum:
+            - OWNER
+            - MEMBER
+        state: &a59
+          type: string
+          enum:
+            - ACTIVE
+            - REMOVED
+        version: *a25
+    Invitation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organizationId
+        - organizationName
+        - recipientAccountId
+        - recipientName
+        - recipientEmail
+        - position
+        - state
+        - version
+        - createdAt
+      properties:
+        id: *a9
+        organizationId: *a9
+        organizationName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        recipientAccountId: *a9
+        recipientName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+        recipientEmail:
+          type: string
+          format: email
+        position:
+          type: string
+          minLength: 1
+          maxLength: 120
+        state:
+          type: string
+          enum:
+            - PENDING
+            - ACCEPTED
+            - DECLINED
+            - CANCELLED
+        version: *a25
+        createdAt:
+          type: string
+          format: date-time
+    InviteMember:
+      type: object
+      additionalProperties: false
+      required:
+        - recipientEmail
+        - position
+        - idempotencyKey
+      properties:
+        recipientEmail:
+          type: string
+          format: email
+          maxLength: 320
+        position:
+          type: string
+          minLength: 1
+          maxLength: 120
+        idempotencyKey: *a9
+    VersionCommand:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+      properties:
+        version: *a25
+    EditMember:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - position
+      properties:
+        version: *a25
+        position:
+          type: string
+          minLength: 1
+          maxLength: 120
+    ActorSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - accountId
+        - displayName
+        - globalRole
+        - organizationId
+        - organizationName
+        - position
+        - capturedAt
+        - legacy
+      properties:
+        accountId: *a9
+        displayName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+        globalRole:
+          $ref: "#/components/schemas/Role"
+        organizationId:
+          anyOf:
+            - *a9
+            - type: "null"
+        organizationName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 160
+            - type: "null"
+        position:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: "null"
+        capturedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        legacy:
+          type: boolean
+    ProjectPermissions:
+      type: object
+      additionalProperties: false
+      required:
+        - canManageTeam
+        - canPrepareDocuments
+        - canPublishJournal
+        - canRecordWork
+        - canAnswerJournal
+        - canDecideDocuments
+      properties:
+        canManageTeam:
+          type: boolean
+        canPrepareDocuments:
+          type: boolean
+        canPublishJournal:
+          type: boolean
+        canRecordWork:
+          type: boolean
+        canAnswerJournal:
+          type: boolean
+        canDecideDocuments:
+          type: boolean
+    TeamAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        - membershipId
+        - documents
+        - works
+      properties:
+        membershipId: *a9
+        documents:
+          type: boolean
+        works:
+          type: boolean
+    TeamMember:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organizationId
+        - accountId
+        - displayName
+        - email
+        - position
+        - role
+        - state
+        - version
+        - documents
+        - works
+      properties:
+        id: *a9
+        organizationId: *a9
+        accountId: *a9
+        displayName: *a55
+        email: *a56
+        position: *a57
+        role: *a58
+        state: *a59
+        version: *a25
+        documents:
+          type: boolean
+        works:
+          type: boolean
+    ProjectTeam:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - members
+      properties:
+        version: *a25
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamMember"
+    EditProjectTeam:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - members
+      properties:
+        version: *a25
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamAssignment"
+    ConnectOrganization:
+      type: object
+      additionalProperties: false
+      required:
+        - organizationId
+      properties:
+        organizationId: *a9
+    ContractorPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - organization
+        - primaryContact
+      properties:
+        organization:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - displayName
+            - inn
+          properties:
+            id: *a9
+            displayName:
+              type: string
+              minLength: 1
+              maxLength: 160
+            inn:
+              type: string
+              minLength: 1
+              maxLength: 12
+        primaryContact:
+          $ref: "#/components/schemas/ActorSnapshot"
+    Attachment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - name
+        - contentType
+        - size
+        - sha256
+        - caption
+        - state
+        - createdAt
+        - contentUrl
+      properties:
+        id: *a11
+        projectId: *a11
+        stageId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        name:
+          type: string
+        contentType:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/webp
+            - application/pdf
+        size:
+          type: integer
+          minimum: 1
+          maximum: 20971520
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        caption:
+          type: string
+          maxLength: 300
+        state:
+          type: string
+          enum:
+            - READY
+        createdAt:
+          type: string
+          format: date-time
+        contentUrl:
+          type: string
+    JournalEvidence:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *a19
+        text: &a62
+          type: string
+        authorSnapshot:
+          $ref: "#/components/schemas/ActorSnapshot"
+        createdAt:
+          type: string
+          format: date-time
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+          maxItems: 10
+      required:
+        - id
+        - text
+        - authorSnapshot
+        - createdAt
+        - attachments
+    AcceptanceSubmission:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *a19
+        projectId: *a19
+        stageId: *a19
+        cycleNumber:
+          type: integer
+          minimum: 1
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        state:
+          type: string
+          enum:
+            - OPEN
+            - ACCEPTED
+            - RETURNED
+        version: &a61
+          type: integer
+          minimum: 0
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalEvidence"
+          maxItems: 20
+        authorSnapshot:
+          $ref: "#/components/schemas/ActorSnapshot"
+        createdAt:
+          type: string
+          format: date-time
+        decision:
+          type:
+            - string
+            - "null"
+          enum:
+            - ACCEPT
+            - RETURN
+            - null
+        comment:
+          type:
+            - string
+            - "null"
+        decidedBy:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+        decidedAt: *a60
+      required:
+        - id
+        - projectId
+        - stageId
+        - cycleNumber
+        - summary
+        - state
+        - version
+        - evidence
+        - authorSnapshot
+        - createdAt
+        - decision
+        - comment
+        - decidedBy
+        - decidedAt
+    AcceptancePage:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum:
+            - NOT_SUBMITTED
+            - OPEN
+            - ACCEPTED
+            - RETURNED
+        submissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcceptanceSubmission"
+        bankStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - PENDING
+            - UNKNOWN
+            - RECEIVED
+            - ACCEPTED
+            - NEEDS_INFORMATION
+            - null
+        mortgage:
+          type: boolean
+      required:
+        - state
+        - submissions
+        - bankStatus
+        - mortgage
+    CreateAcceptance:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedStageVersion: *a61
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        entryIds:
+          type: array
+          items: *a19
+          maxItems: 20
+          minItems: 1
+          uniqueItems: true
+        idempotencyKey: *a19
+      required:
+        - expectedStageVersion
+        - summary
+        - entryIds
+        - idempotencyKey
+    DecideAcceptance:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: *a61
+        decision:
+          type: string
+          enum:
+            - ACCEPT
+            - RETURN
+        comment:
+          type:
+            - string
+            - "null"
+          maxLength: 5000
+        idempotencyKey: *a19
+      required:
+        - expectedVersion
+        - decision
+        - idempotencyKey
+    ProjectInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *a19
+        name: *a62
+        address: *a62
+        financingSource:
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - name
+        - address
+        - financingSource
+    AgreedDocuments:
+      type: object
+      additionalProperties: false
+      properties:
+        proposalId: &a63
+          type:
+            - string
+            - "null"
+          format: uuid
+        contractId: *a63
+        estimateText:
+          type:
+            - string
+            - "null"
+        contractText:
+          type:
+            - string
+            - "null"
+        totalPrice:
+          type:
+            - number
+            - "null"
+      required:
+        - proposalId
+        - contractId
+        - estimateText
+        - contractText
+        - totalPrice
+    BankStagePacket:
+      type: object
+      additionalProperties: false
+      properties:
+        project:
+          $ref: "#/components/schemas/ProjectInfo"
+        documents:
+          $ref: "#/components/schemas/AgreedDocuments"
+        stage:
+          $ref: "#/components/schemas/Stage"
+        acceptance:
+          $ref: "#/components/schemas/AcceptanceSubmission"
+        creditCaseId: *a19
+        additionalFiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+          maxItems: 100
+        clarifications:
+          type: array
+          items: *a62
+          maxItems: 100
+      required:
+        - project
+        - documents
+        - stage
+        - acceptance
+        - creditCaseId
+        - additionalFiles
+        - clarifications
+    BankStageSubmission:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *a19
+        projectId: *a19
+        stageId: *a19
+        acceptanceId: *a19
+        revision:
+          type: integer
+          minimum: 1
+        previousId: *a63
+        state:
+          type: string
+          enum:
+            - PENDING
+            - UNKNOWN
+            - RECEIVED
+            - ACCEPTED
+            - NEEDS_INFORMATION
+        version: *a61
+        bankReference:
+          type:
+            - string
+            - "null"
+        reason:
+          type:
+            - string
+            - "null"
+        packet:
+          $ref: "#/components/schemas/BankStagePacket"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        attemptCount: *a61
+      required:
+        - id
+        - projectId
+        - stageId
+        - acceptanceId
+        - revision
+        - previousId
+        - state
+        - version
+        - bankReference
+        - reason
+        - packet
+        - createdAt
+        - updatedAt
+        - attemptCount
+    BankConfirmation:
+      type: object
+      additionalProperties: false
+      properties:
+        mortgage:
+          type: boolean
+        connected:
+          type: boolean
+        canSend:
+          type: boolean
+        version: *a61
+        preview:
+          anyOf:
+            - $ref: "#/components/schemas/BankStagePacket"
+            - type: "null"
+        submissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStageSubmission"
+      required:
+        - mortgage
+        - connected
+        - canSend
+        - version
+        - preview
+        - submissions
+    SendBankConfirmation:
+      type: object
+      additionalProperties: false
+      properties:
+        acceptanceId: *a19
+        previousId: *a63
+        expectedVersion: *a61
+        note:
+          type:
+            - string
+            - "null"
+          maxLength: 5000
+        attachmentIds:
+          type: array
+          items: *a19
+          maxItems: 10
+          uniqueItems: true
+        idempotencyKey: *a19
+      required:
+        - acceptanceId
+        - expectedVersion
+        - idempotencyKey
+    RetryBankConfirmation:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: *a61
+      required:
+        - expectedVersion
+    Completion:
+      type: object
+      additionalProperties: false
+      properties:
+        projectId: *a19
+        total: *a61
+        accepted: *a61
+        canComplete:
+          type: boolean
+        reason:
+          type:
+            - string
+            - "null"
+        version: *a61
+        completedAt: *a60
+        completedBy:
+          anyOf:
+            - $ref: "#/components/schemas/ActorSnapshot"
+            - type: "null"
+      required:
+        - projectId
+        - total
+        - accepted
+        - canComplete
+        - reason
+        - version
+        - completedAt
+        - completedBy
+    ConfirmCompletion:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: *a61
+        idempotencyKey: *a19
+      required:
+        - expectedVersion
+        - idempotencyKey
+    ConnectConstructionBankCase:
+      type: object
+      additionalProperties: false
+      required:
+        - consent
+        - idempotencyKey
+      properties:
+        consent:
+          type: boolean
+          const: true
+        idempotencyKey:
+          type: string
+          format: uuid
+    ConstructionBankCase:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - isDemo
+      properties:
+        id:
+          type: string
+          format: uuid
+        isDemo:
+          type: boolean
+          const: true
