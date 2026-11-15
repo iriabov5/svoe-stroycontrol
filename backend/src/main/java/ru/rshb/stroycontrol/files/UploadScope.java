@@ -7,8 +7,8 @@ import java.util.UUID;
  *
  * @param actor автор загрузки
  * @param project карточка дома
- * @param stage этап либо null для банковского дополнения
- * @param purpose назначение JOURNAL либо BANK
+ * @param stage этап либо null для банковского дополнения или сметы
+ * @param purpose назначение JOURNAL, BANK либо PROPOSAL
  * @param key ключ идемпотентности
  */
 record UploadScope(UUID actor, UUID project, UUID stage, String purpose, UUID key) {}

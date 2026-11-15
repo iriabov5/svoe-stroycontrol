@@ -25,11 +25,23 @@ test("Заказчик создаёт дом и назначает подряд�
     page.getByRole("heading", { name: "С возвращением" }),
   ).toBeVisible();
   await accessible(page);
-  if (info.project.name === "desktop")
+  await expect(
+    page.getByRole("img", { name: "РСХБ", exact: true }),
+  ).toHaveCount(1);
+  await expect(page.locator("footer.site-footer")).toHaveCount(0);
+  if (info.project.name === "desktop") {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight <= window.innerHeight + 1,
+      ),
+    ).toBe(true);
     await page.screenshot({
       path: "../docs/screenshots/account-login.png",
       fullPage: true,
     });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
   await page.getByLabel("Ваше имя", { exact: true }).fill("Иван");
   await page.getByLabel("Email", { exact: true }).fill(owner);

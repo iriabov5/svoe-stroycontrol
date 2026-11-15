@@ -2,11 +2,14 @@ package ru.rshb.stroycontrol.common;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,6 +56,7 @@ public class ApiProblems {
      */
     public Problem body(ApiException exception) {
         var e = exception.getError();
+        recordError(e);
         return new Problem("about:blank", e.title, e.status, e.name(), exception.getFieldErrors());
     }
 
@@ -65,21 +69,39 @@ public class ApiProblems {
      * @return problem с кодом и HTTP-статусом
      */
     public Problem body(ApiError error) {
+        recordError(error);
         return new Problem("about:blank", error.title, error.status, error.name());
     }
 
     /**
      * Записывает ошибку из фильтра до передачи управления MVC.
      *
+     * @param request запрос для связи публичного кода с журналом
      * @param response ответ браузеру
      * @param error публичная ошибка
      * @throws IOException при недоступности выходного потока
      */
-    public void write(HttpServletResponse response, ApiError error) throws IOException {
+    public void write(HttpServletRequest request, HttpServletResponse response, ApiError error)
+            throws IOException {
+        request.setAttribute(RequestLoggingFilter.ERROR_ATTRIBUTE, error.name());
         response.setStatus(error.status);
         response.setContentType("application/problem+json");
         response.setCharacterEncoding("UTF-8");
         response.setHeader("Cache-Control", "no-store");
         mapper.writeValue(response.getOutputStream(), body(error));
+    }
+
+    /**
+     * Передаёт код MVC-ошибки журналу запроса, не сохраняя ошибки полей.
+     *
+     * @param error публичная причина
+     */
+    private void recordError(ApiError error) {
+        if (RequestContextHolder.getRequestAttributes()
+                instanceof ServletRequestAttributes attributes) {
+            attributes
+                    .getRequest()
+                    .setAttribute(RequestLoggingFilter.ERROR_ATTRIBUTE, error.name());
+        }
     }
 }

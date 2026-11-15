@@ -24,10 +24,10 @@
 | Nginx | `1.28-alpine` | Текущий тег в Dockerfile фронтенда. |
 | Docker Compose | 5.7.1 | [Релиз Compose](https://github.com/docker/compose/releases/tag/v5.7.1). |
 | OpenSpec CLI | 1.9.0 | Версия инициализации и валидации проекта. |
-| MinIO, S3-клиент Java | Официальный исходный commit `7aac2a2c5b7c882e68c1ce017d8256be2feea27f`, AWS SDK v2 2.59.1 | Закрытые объекты; сборка и ограничения описаны ниже. |
+| SeaweedFS mini, S3-клиент Java | `chrislusf/seaweedfs:4.52`, AWS SDK v2 2.59.1 | [SeaweedFS 4.52](https://github.com/seaweedfs/seaweedfs/releases/tag/4.52), образец запуска SecureShare; S3-адаптер сохранён. |
 
 Версии подключённых компонентов сверяются с Gradle Wrapper, `build.gradle.kts`, `package.json`, `package-lock.json` и контейнерными конфигурациями. Vitest, React Testing Library, Playwright и axe-core подключены и используются в проверках приложения. Temurin в Dockerfile пока указан тегами ветки 25. Фиксировать точные версии прямых зависимостей и теги или digest образов. Транзитивные зависимости задаются BOM и lock-файлом. Проверить разрешение зависимостей, генерацию типов, сборку, миграции и тесты.
 
 ### Файловое расширение MVP
 
-AWS SDK for Java v2 (S3 + URL Connection client): **2.59.1**, версия проверена по Maven Central 14 ноября 2026. MinIO Community: сборка официального исходного коммита **7aac2a2c5b7c882e68c1ce017d8256be2feea27f**; Go **1.27.1**, runtime Alpine **3.23**. Ранее запланированный SeaweedFS в эту реализацию не входит: действующие инструкции владельца проекта задают MinIO. Статус поддержки и локальная сборка описаны в [development](development.md#закрытые-вложения).
+AWS SDK for Java v2 (S3 + URL Connection client): **2.59.1**. SeaweedFS mini: **4.52**, тот же закреплённый образ используется в Compose и интеграционных тестах. Образ не требует сборки Go-исходников. Действующие настройки используют SeaweedFS; прежний MinIO и его том оставлены только для описанного разового переноса и возврата. [Локальный запуск и перенос](development.md#закрытые-вложения).

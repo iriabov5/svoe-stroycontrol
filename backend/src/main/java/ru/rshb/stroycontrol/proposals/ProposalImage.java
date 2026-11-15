@@ -14,11 +14,7 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * Хранит внешнюю HTTPS-ссылку на иллюстрацию сметы, подпись и порядок показа.
- *
- * <p>Байты изображения не сохраняются и не загружаются сервером; доступ к смете проверяет сервис.
- */
+/** Хранит ссылку на закрытый файл либо прежний внешний URL, подпись и порядок версии сметы. */
 @Entity
 @Table(name = "proposal_images")
 @Getter
@@ -40,6 +36,9 @@ class ProposalImage {
 
     @Column(name = "url")
     private String url;
+
+    @Column(name = "attachment_id")
+    private UUID attachmentId;
 
     @Column(name = "caption")
     private String caption;

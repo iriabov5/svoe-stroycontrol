@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { register, login, accessible, schema, csrf } from "./support";
 
@@ -120,15 +121,53 @@ test("Заявка, демо-ипотека, смета и договор отк
   await page
     .getByLabel("Условия и исключения", { exact: true })
     .fill("Инженерные сети и внутренняя отделка не входят.");
-  await page
-    .getByRole("button", { name: "Добавить изображение", exact: true })
-    .click();
-  await page
-    .getByLabel("Ссылка на изображение", { exact: true })
-    .fill("https://demo-images.example.test/house-plan.svg");
+  const svg = await readFile("e2e/fixtures/house-plan.svg", "utf8");
+  const pngBase64 = await page.evaluate(async (source) => {
+    const url = URL.createObjectURL(
+      new Blob([source], { type: "image/svg+xml" }),
+    );
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d")!.drawImage(image, 0, 0);
+      return canvas.toDataURL("image/png").split(",")[1];
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }, svg);
+  const planPng = Buffer.from(pngBase64, "base64");
+  await page.getByLabel("Добавить изображения", { exact: true }).setInputFiles({
+    name: "house-plan.png",
+    mimeType: "image/png",
+    buffer: planPng,
+  });
   await page
     .getByLabel("Подпись изображения", { exact: true })
     .fill("Демонстрационная планировка 8 × 10 м");
+  await page
+    .getByRole("button", {
+      name: "Открыть изображение: Демонстрационная планировка 8 × 10 м",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("dialog").screenshot({
+    path: `../docs/screenshots/proposal-preview-${info.project.name}.png`,
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page
+    .locator("form")
+    .filter({
+      has: page.getByLabel("Смета: работы, материалы и цены", { exact: true }),
+    })
+    .screenshot({
+      path: `../docs/screenshots/proposal-upload-${info.project.name}.png`,
+    });
   await page
     .getByRole("button", { name: "Добавить этап в предложение", exact: true })
     .click();
@@ -178,6 +217,14 @@ test("Заявка, демо-ипотека, смета и договор отк
     .getByRole("link")
     .filter({ hasText: "Каркасный дом у озера" })
     .click();
+  await page
+    .getByRole("button", {
+      name: "Открыть изображение: Демонстрационная планировка 8 × 10 м",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Согласовать предложение", exact: true })
     .click();
@@ -317,7 +364,7 @@ test("Заявка, демо-ипотека, смета и договор отк
       {
         name: "passport.pdf",
         mimeType: "application/pdf",
-        buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"),
+        buffer: await readFile("e2e/fixtures/material-passport.pdf"),
       },
     ]);
   await page
@@ -596,7 +643,7 @@ test("Заявка, демо-ипотека, смета и договор отк
     .setInputFiles({
       name: "clarification.pdf",
       mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"),
+      buffer: await readFile("e2e/fixtures/material-passport.pdf"),
     });
   await bankPanel
     .getByLabel("Пояснение к документу", { exact: true })

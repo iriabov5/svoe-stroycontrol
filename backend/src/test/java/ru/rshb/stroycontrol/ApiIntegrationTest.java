@@ -62,19 +62,20 @@ class ApiIntegrationTest {
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.7");
 
     @Container
-    static final GenericContainer<?> MINIO =
-            new GenericContainer<>("svoe-stroycontrol-minio:local")
-                    .withEnv("MINIO_ROOT_USER", "integration-access")
-                    .withEnv("MINIO_ROOT_PASSWORD", "integration-secret-password")
-                    .withExposedPorts(9000)
-                    .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000));
+    static final GenericContainer<?> S3 =
+            new GenericContainer<>("chrislusf/seaweedfs:4.52")
+                    .withCommand("mini", "-dir=/data")
+                    .withEnv("AWS_ACCESS_KEY_ID", "integration-access")
+                    .withEnv("AWS_SECRET_ACCESS_KEY", "integration-secret-password")
+                    .withEnv("S3_BUCKET", "stroycontrol-private")
+                    .withExposedPorts(8333)
+                    .waitingFor(Wait.forListeningPort());
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
         registry.add("bank.stage.worker-delay-ms", () -> "3600000");
         registry.add(
-                "storage.endpoint",
-                () -> "http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000));
+                "storage.endpoint", () -> "http://" + S3.getHost() + ":" + S3.getMappedPort(8333));
         registry.add("storage.access-key", () -> "integration-access");
         registry.add("storage.secret-key", () -> "integration-secret-password");
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -919,6 +920,13 @@ class ApiIntegrationTest {
     }
 
     JsonNode saveProposal(Browser builder, String id, JsonNode draft) throws Exception {
+        return saveProposalImages(builder, id, draft, List.of());
+    }
+
+    /** Сохраняет проверяемый набор изображений в полноценном черновике с планом. */
+    JsonNode saveProposalImages(
+            Browser builder, String id, JsonNode draft, List<Map<String, Object>> pictures)
+            throws Exception {
         var plan =
                 Map.of(
                         "id",
@@ -938,7 +946,7 @@ class ApiIntegrationTest {
         body.put("estimateText", "Работы 100000, материалы 200000");
         body.put("termsText", null);
         body.put("totalPrice", 300000);
-        body.put("images", List.of());
+        body.put("images", pictures);
         body.put("stages", List.of(plan));
         var response =
                 builder.request(
@@ -971,7 +979,6 @@ class ApiIntegrationTest {
     void preparationLifecycle() throws Exception {
         var owner = new Browser().account("CUSTOMER");
         var builder = new Browser().account("CONTRACTOR");
-        var stranger = new Browser().account("CUSTOMER");
         var id = preparationProject(owner);
         var root = "/projects/" + id;
         owner.assign(id, builder.email);
@@ -993,7 +1000,6 @@ class ApiIntegrationTest {
         var p = saveProposal(builder, id, proposal(builder, id));
         var path = root + "/proposals/" + p.path("id").asText();
         error(owner.request("GET", path, null, false), 404, "PROPOSAL_NOT_FOUND");
-        error(stranger.request("GET", path, null, false), 404, "PROJECT_NOT_FOUND");
         p = documentCommand(builder, path, "submit", p);
         var returned =
                 owner.request(
@@ -1006,7 +1012,8 @@ class ApiIntegrationTest {
                                 "Уточнить материалы"),
                         true);
         assertThat(returned.statusCode()).isEqualTo(200);
-        p = saveProposal(builder, id, proposal(builder, id));
+        var nextDraft = proposal(builder, id);
+        p = saveProposal(builder, id, nextDraft);
         path = root + "/proposals/" + p.path("id").asText();
         p = documentCommand(builder, path, "submit", p);
         p = documentCommand(owner, path, "approve", p);
@@ -1019,6 +1026,136 @@ class ApiIntegrationTest {
                 409,
                 "CONTRACT_REQUIRED");
         approveContractAndStart(owner, builder, root, stagePath);
+    }
+
+    @Test
+    @DisplayName("Изображение сметы скрыто в черновике, публикуется и сохраняется в новой версии")
+    void proposalImagePublicationLifecycle() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var builder = new Browser().account("CONTRACTOR");
+        var stranger = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var root = "/projects/" + id;
+        owner.assign(id, builder.email);
+        var request = preparationRequest(owner, id, "OWN_FUNDS");
+        assertThat(
+                        owner.request(
+                                        "POST",
+                                        root + "/request/submit",
+                                        Map.of("version", request.path("version").asLong()),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        var proposal = saveProposal(builder, id, proposal(builder, id));
+        proposal = attachProposalImage(builder, owner, stranger, id, proposal);
+        var pictureId = proposal.path("images").get(0).path("attachmentId").asText();
+        var imageContent = root + "/attachments/" + pictureId + "/content";
+        var path = root + "/proposals/" + proposal.path("id").asText();
+        error(stranger.request("GET", path, null, false), 404, "PROJECT_NOT_FOUND");
+        proposal = documentCommand(builder, path, "submit", proposal);
+        assertThat(owner.request("GET", imageContent, null, false).statusCode()).isEqualTo(200);
+        var anonymous =
+                HttpClient.newHttpClient()
+                        .send(
+                                HttpRequest.newBuilder(
+                                                URI.create(
+                                                        "http://"
+                                                                + S3.getHost()
+                                                                + ":"
+                                                                + S3.getMappedPort(8333)
+                                                                + "/stroycontrol-private"))
+                                        .GET()
+                                        .build(),
+                                HttpResponse.BodyHandlers.discarding());
+        assertThat(anonymous.statusCode()).isIn(401, 403);
+
+        assertThat(
+                        owner.request(
+                                        "POST",
+                                        path + "/request-changes",
+                                        Map.of(
+                                                "version",
+                                                proposal.path("version").asLong(),
+                                                "comment",
+                                                "Уточнить материалы"),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        var nextDraft = proposal(builder, id);
+        assertThat(nextDraft.path("images").get(0).path("attachmentId").asText())
+                .isEqualTo(pictureId);
+        saveProposal(builder, id, nextDraft);
+        assertThat(owner.request("GET", imageContent, null, false).statusCode()).isEqualTo(200);
+    }
+
+    /**
+     * Загружает изображение сметы и проверяет закрытый черновик, повтор загрузки и формат файла.
+     *
+     * @param builder подрядчик, редактирующий предложение
+     * @param owner заказчик карточки
+     * @param stranger посторонний аккаунт
+     * @param id карточка дома
+     * @param p черновик предложения
+     * @return черновик с проверенным вложением
+     * @throws Exception при ошибке HTTP-обмена
+     */
+    private JsonNode attachProposalImage(
+            Browser builder, Browser owner, Browser stranger, String id, JsonNode p)
+            throws Exception {
+        var root = "/projects/" + id;
+        var uploadKey = UUID.randomUUID();
+        var picture =
+                json(
+                        builder.uploadFor(
+                                id,
+                                null,
+                                uploadKey,
+                                demoPng(),
+                                "plan.png",
+                                "План дома",
+                                true,
+                                "PROPOSAL"));
+        assertThat(
+                        json(
+                                builder.uploadFor(
+                                        id,
+                                        null,
+                                        uploadKey,
+                                        demoPng(),
+                                        "plan.png",
+                                        "План дома",
+                                        true,
+                                        "PROPOSAL")))
+                .isEqualTo(picture);
+        var pictureId = picture.path("id").asText();
+        var imageContent = root + "/attachments/" + pictureId + "/content";
+        p =
+                saveProposalImages(
+                        builder,
+                        id,
+                        p,
+                        List.of(
+                                Map.of(
+                                        "attachmentId",
+                                        pictureId,
+                                        "caption",
+                                        "План первого этажа")));
+        assertThat(p.path("images").get(0).path("attachmentId").asText()).isEqualTo(pictureId);
+        error(owner.request("GET", imageContent, null, false), 404, "ATTACHMENT_NOT_FOUND");
+        error(stranger.request("GET", imageContent, null, false), 404, "PROJECT_NOT_FOUND");
+        error(
+                builder.uploadFor(
+                        id,
+                        null,
+                        UUID.randomUUID(),
+                        "%PDF-1.4\n%%EOF\n".getBytes(),
+                        "plan.pdf",
+                        "PDF",
+                        true,
+                        "PROPOSAL"),
+                400,
+                "VALIDATION_ERROR");
+        return p;
     }
 
     @Test

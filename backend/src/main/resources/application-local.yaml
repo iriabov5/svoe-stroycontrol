@@ -1,0 +1,24 @@
+# Профиль для запуска backend из IDEA из корня репозитория или папки backend/.
+# Локальный .env общий с Docker Compose; реальные секреты не хранятся в YAML.
+spring:
+  config:
+    import:
+      - "optional:file:../.env[.properties]"
+      - "optional:file:./.env[.properties]"
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/stroycontrol}
+    username: ${SPRING_DATASOURCE_USERNAME:stroycontrol}
+    password: ${SPRING_DATASOURCE_PASSWORD:stroycontrol}
+
+server:
+  port: 8080
+
+storage:
+  endpoint: ${STORAGE_ENDPOINT:http://127.0.0.1:${STORAGE_PORT:19001}}
+  access-key: ${STORAGE_ACCESS_KEY:local-stroycontrol}
+  secret-key: ${STORAGE_SECRET_KEY}
+  bucket: ${STORAGE_BUCKET:stroycontrol-private}
+
+bank:
+  stage:
+    scenario: ${BANK_STAGE_SCENARIO:NEEDS_INFORMATION}

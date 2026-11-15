@@ -21,6 +21,16 @@ public interface Files {
     List<AttachmentView> retain(UUID projectId, UUID stageId, List<UUID> ids);
 
     /**
+     * Удерживает изображения сметы в транзакции сохранения её версии.
+     *
+     * @param projectId проект под блокировкой, права записи проверяет модуль смет
+     * @param ids уникальные READY-файлы назначения PROPOSAL, не более десяти
+     * @return метаданные в заданном порядке
+     * @throws ApiException если файл чужой, неготовый или имеет другое назначение
+     */
+    List<AttachmentView> retainProposal(UUID projectId, List<UUID> ids);
+
+    /**
      * Возвращает метаданные опубликованных файлов после проверки проекта вызывающим модулем.
      *
      * @param projectId доступный проект

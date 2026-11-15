@@ -87,9 +87,11 @@ class SecurityConfig {
                                     .authenticated())
                     .exceptionHandling(config ->
                             config.authenticationEntryPoint((request, response, exception) ->
-                                            problems.write(response, ApiError.AUTH_REQUIRED))
+                                            problems.write(
+                                                    request, response, ApiError.AUTH_REQUIRED))
                                     .accessDeniedHandler((request, response, exception) ->
                                             problems.write(
+                                                    request,
                                                     response,
                                                     exception instanceof CsrfException
                                                             ? ApiError.INVALID_CSRF_TOKEN

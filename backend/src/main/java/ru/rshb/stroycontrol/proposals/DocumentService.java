@@ -20,6 +20,7 @@ import ru.rshb.stroycontrol.accounts.AccountView;
 import ru.rshb.stroycontrol.common.ActorSnapshot;
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.files.Files;
 import ru.rshb.stroycontrol.organizations.Organizations;
 import ru.rshb.stroycontrol.projects.ProjectAccess;
 import ru.rshb.stroycontrol.projects.Projects;
@@ -51,6 +52,7 @@ class DocumentService implements AgreedDocuments {
     private static final String FIELD_ESTIMATE_TEXT = "estimateText";
     private static final String FIELD_TERMS_TEXT = "termsText";
     private static final String FIELD_TOTAL_PRICE = "totalPrice";
+    private static final String FIELD_ATTACHMENT_ID = "attachmentId";
     private static final String FIELD_IMAGES = "images";
     private static final String FIELD_STAGES = "stages";
     private static final String FIELD_CONTRACT_TEXT = "contractText";
@@ -70,6 +72,7 @@ class DocumentService implements AgreedDocuments {
     private final Stages stages;
     private final Clock clock;
     private final Organizations organizations;
+    private final Files files;
 
     /** {@inheritDoc} */
     @Override
@@ -192,7 +195,11 @@ class DocumentService implements AgreedDocuments {
                 entity.getTermsText(),
                 entity.getTotalPrice(),
                 images.findByProposalIdOrderByPositionAsc(entity.getId()).stream()
-                        .map(image -> new ProposalImageView(image.getUrl(), image.getCaption()))
+                        .map(image ->
+                                new ProposalImageView(
+                                        imageUrl(entity.getProjectId(), image),
+                                        image.getCaption(),
+                                        image.getAttachmentId()))
                         .toList(),
                 plans.findByProposalIdOrderByPositionAsc(entity.getId()).stream()
                         .map(plan ->
@@ -430,7 +437,8 @@ class DocumentService implements AgreedDocuments {
         var pictures = new ArrayList<Map<String, Object>>();
         for (var picture : source.images()) {
             var row = new LinkedHashMap<String, Object>();
-            row.put("url", picture.url());
+            if (picture.attachmentId() == null) row.put("url", picture.url());
+            else row.put(FIELD_ATTACHMENT_ID, picture.attachmentId());
             row.put(FIELD_CAPTION, picture.caption());
             pictures.add(row);
         }
@@ -548,19 +556,51 @@ class DocumentService implements AgreedDocuments {
         var imageValues = new ArrayList<ProposalImage>();
         var planValues = new ArrayList<ProposalStagePlan>();
         int position = 1;
+        var legacyUrls = new HashSet<String>();
+        images.findByProposalIdOrderByPositionAsc(id).stream()
+                .map(ProposalImage::getUrl)
+                .filter(Objects::nonNull)
+                .forEach(legacyUrls::add);
+        proposals.findByProjectIdOrderByRevisionNoDesc(entity.getProjectId()).stream()
+                .filter(previous -> previous.getRevisionNo() == entity.getRevisionNo() - 1)
+                .flatMap(previous ->
+                        images.findByProposalIdOrderByPositionAsc(previous.getId()).stream())
+                .map(ProposalImage::getUrl)
+                .filter(Objects::nonNull)
+                .forEach(legacyUrls::add);
+        var attachmentIds = new ArrayList<UUID>();
         for (var picture : pictures) {
-            keys(picture, "url", FIELD_CAPTION);
-            String url = image(picture.get("url"));
+            keys(picture, "url", FIELD_ATTACHMENT_ID, FIELD_CAPTION);
             String caption = text(picture.get(FIELD_CAPTION), 300);
-            require(caption != null);
+            field(caption != null, FIELD_IMAGES, "Подпишите каждое изображение");
+            UUID attachmentId =
+                    picture.containsKey(FIELD_ATTACHMENT_ID)
+                            ? uid(picture.get(FIELD_ATTACHMENT_ID))
+                            : null;
+            String url = null;
+            if (attachmentId == null) {
+                url = image(picture.get("url"));
+                field(
+                        legacyUrls.contains(url),
+                        FIELD_IMAGES,
+                        "Добавьте изображение с устройства вместо новой внешней ссылки");
+            } else {
+                field(
+                        !picture.containsKey("url"),
+                        FIELD_IMAGES,
+                        "Укажите файл либо прежнюю ссылку");
+                attachmentIds.add(attachmentId);
+            }
             imageValues.add(
                     ProposalImage.builder()
                             .proposalId(id)
                             .position(position++)
                             .url(url)
+                            .attachmentId(attachmentId)
                             .caption(caption)
                             .build());
         }
+        files.retainProposal(entity.getProjectId(), attachmentIds);
         position = 1;
         var seen = new HashSet<UUID>();
         for (var plan : planEntries) {
@@ -608,6 +648,19 @@ class DocumentService implements AgreedDocuments {
         images.saveAll(imageValues);
         plans.saveAll(planValues);
         proposals.saveAndFlush(entity);
+    }
+
+    /**
+     * Выбирает защищённый адрес загруженной картинки, не раскрывая ключ объекта S3.
+     *
+     * @param projectId карточка дома
+     * @param image сохранённая иллюстрация
+     * @return адрес backend либо сохранённый внешний HTTPS URL
+     */
+    private String imageUrl(UUID projectId, ProposalImage image) {
+        if (image.getAttachmentId() == null) return image.getUrl();
+        return "/api/v1/projects/%s/attachments/%s/content"
+                .formatted(projectId, image.getAttachmentId());
     }
 
     /**

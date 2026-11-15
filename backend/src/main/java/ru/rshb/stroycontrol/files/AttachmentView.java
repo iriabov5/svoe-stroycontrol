@@ -8,7 +8,7 @@ import java.util.UUID;
  *
  * @param id файл
  * @param projectId проект
- * @param stageId этап либо null для банковского дополнения
+ * @param stageId этап либо null для банковского дополнения и иллюстрации сметы
  * @param name безопасное исходное имя
  * @param contentType проверенный формат
  * @param size размер в байтах

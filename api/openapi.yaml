@@ -3145,7 +3145,7 @@ paths:
     post:
       tags:
         - Journal
-      summary: Загрузить закрытую фотографию или PDF до публикации записи
+      summary: Загрузить закрытое вложение сметы, журнала или банковского дополнения
       operationId: uploadAttachment
       parameters:
         - in: path
@@ -3179,7 +3179,8 @@ paths:
                   enum:
                     - JOURNAL
                     - BANK
-                  description: JOURNAL требует stageId и доступа Работы; BANK — собственника ипотечного проекта
+                    - PROPOSAL
+                  description: JOURNAL требует stageId и доступа Работы; BANK — собственника ипотечного проекта; PROPOSAL — редактируемой сметы и подготовки документов, без stageId, только JPEG/PNG/WebP до 10 МиБ
                 caption:
                   type: string
                   maxLength: 300
@@ -3238,6 +3239,7 @@ paths:
       tags:
         - Journal
       summary: Прочитать вложение с повторной проверкой прав участника
+      description: PROPOSAL требует видимости версии сметы. Заказчик не получает изображения только из черновика; прежняя отправленная версия сохраняет доступ. Чужой файл или назначение — 404, неготовый — 409, сбой хранилища — 503.
       operationId: downloadAttachment
       parameters:
         - in: path
@@ -4227,15 +4229,50 @@ components:
         financingSource: *a40
       required:
         - version
+    ProposalImageEdit:
+      description: Загруженное изображение либо сохранённая прежняя HTTPS-иллюстрация. Новый внешний URL запрещён. До 10 уникальных изображений на версию; подпись принадлежит версии сметы.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [attachmentId, caption]
+          properties:
+            attachmentId:
+              type: string
+              format: uuid
+              description: READY-файл PROPOSAL того же проекта
+            caption:
+              type: string
+              minLength: 1
+              maxLength: 300
+        - type: object
+          additionalProperties: false
+          required: [url, caption]
+          properties:
+            url:
+              type: string
+              format: uri
+              pattern: ^https://
+              maxLength: 2048
+              description: Только точный URL уже сохранённой иллюстрации текущей или исходной версии
+            caption:
+              type: string
+              minLength: 1
+              maxLength: 300
+      examples:
+        - attachmentId: 00000000-0000-4000-8000-000000000001
+          caption: План первого этажа, 8 × 10 м
     ProposalImage:
       type: object
       additionalProperties: false
       properties:
+        attachmentId:
+          type: [string, "null"]
+          format: uuid
+          description: ID закрытого файла; null для прежней внешней иллюстрации
         url:
           type: string
-          format: uri
-          pattern: ^https://
           maxLength: 2048
+          description: Защищённый относительный URL backend либо прежний внешний HTTPS URL. Изображение inline; сессия и доступ к версии проверяются при каждом запросе, черновик скрыт от заказчика.
         caption:
           type: string
           minLength: 1
@@ -4281,11 +4318,11 @@ components:
             - "null"
           maxLength: 10000
         totalPrice: *a29
-        images: &a44
+        images:
           type: array
           maxItems: 10
           items:
-            $ref: "#/components/schemas/ProposalImage"
+            $ref: "#/components/schemas/ProposalImageEdit"
         stages: &a45
           type: array
           maxItems: 100
@@ -4339,7 +4376,11 @@ components:
         estimateText: *a42
         termsText: *a43
         totalPrice: *a29
-        images: *a44
+        images:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/ProposalImage"
         stages: *a45
         id:
           type: string
