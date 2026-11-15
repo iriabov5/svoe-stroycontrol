@@ -1,20 +1,7 @@
-const marks = {
-  bank: { source: "/brand/rshb.png", label: "РСХБ" },
-  digital: { source: "/brand/rshb-digital.png", label: "РСХБ Цифра" },
-};
-
-export function BrandMark({
-  variant,
-}: Readonly<{ variant: keyof typeof marks }>) {
-  const mark = marks[variant];
+export function BrandMark() {
   return (
-    <span className={"ecosystem-mark ecosystem-mark--" + variant}>
-      <img
-        src={mark.source}
-        alt={mark.label}
-        width={variant === "bank" ? 980 : 312}
-        height={variant === "bank" ? 980 : 312}
-      />
+    <span className="ecosystem-mark ecosystem-mark--bank">
+      <img src="/brand/rshb.png" alt="РСХБ" width={980} height={980} />
     </span>
   );
 }

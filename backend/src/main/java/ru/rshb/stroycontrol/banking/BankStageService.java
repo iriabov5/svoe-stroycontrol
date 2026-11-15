@@ -7,6 +7,7 @@ import static ru.rshb.stroycontrol.common.PreparationInput.uuid;
 import static ru.rshb.stroycontrol.common.PreparationInput.version;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,6 +18,7 @@ import ru.rshb.stroycontrol.acceptance.Acceptance;
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
 import ru.rshb.stroycontrol.common.CommandFingerprint;
+import ru.rshb.stroycontrol.common.SafeDiagnostics;
 import ru.rshb.stroycontrol.files.AttachmentView;
 import ru.rshb.stroycontrol.files.Files;
 import ru.rshb.stroycontrol.projects.MortgageRequests;
@@ -40,6 +42,7 @@ import java.util.UUID;
  * аренде.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 class BankStageService {
     private static final String STATE_NEEDS_INFORMATION = "NEEDS_INFORMATION";
@@ -189,7 +192,11 @@ class BankStageService {
         for (var id : ids) {
             try {
                 dispatch(id);
-            } catch (RuntimeException _) {
+            } catch (RuntimeException exception) {
+                log.error(
+                        "Не удалось обработать фоновую банковскую отправку — отправка={}",
+                        id,
+                        SafeDiagnostics.exception(exception));
                 /* История PENDING/UNKNOWN остаётся для следующего прохода либо ручного повтора. */
             }
         }
@@ -331,11 +338,20 @@ class BankStageService {
     private BankStageGateway.Receipt deliver(Delivery claim) {
         try {
             var receipt = gateway.deliver(claim.key(), claim.revision(), claim.packet());
-            if (receipt == null) return null;
-            if (!Set.of(STATE_RECEIVED, "ACCEPTED", STATE_NEEDS_INFORMATION)
-                    .contains(receipt.state())) return null;
+            if (receipt == null
+                    || !Set.of(STATE_RECEIVED, "ACCEPTED", STATE_NEEDS_INFORMATION)
+                            .contains(receipt.state())) {
+                log.error(
+                        "Банк вернул пустую или неподдерживаемую квитанцию — отправка={}",
+                        claim.id());
+                return null;
+            }
             return receipt;
-        } catch (RuntimeException _) {
+        } catch (RuntimeException exception) {
+            log.error(
+                    "Не удалось доставить пакет в банк — отправка={}",
+                    claim.id(),
+                    SafeDiagnostics.exception(exception));
             return null;
         }
     }

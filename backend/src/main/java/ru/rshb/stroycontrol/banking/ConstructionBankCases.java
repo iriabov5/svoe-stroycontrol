@@ -5,6 +5,7 @@ import static ru.rshb.stroycontrol.common.PreparationInput.keys;
 import static ru.rshb.stroycontrol.common.PreparationInput.uuid;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import org.springframework.web.client.RestClient;
 
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.common.SafeDiagnostics;
 import ru.rshb.stroycontrol.projects.MortgageRequests;
 import ru.rshb.stroycontrol.projects.Projects;
 
@@ -27,6 +29,7 @@ import java.util.UUID;
  * блокировки.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 class ConstructionBankCases {
     private static final String FIELD_CONSENT = "consent";
@@ -85,7 +88,11 @@ class ConstructionBankCases {
         try {
             var response = client.get().uri(mock.url()).retrieve().body(Map.class);
             approval = response == null ? "NOT_FOUND" : String.valueOf(response.get("status"));
-        } catch (RuntimeException _) {
+        } catch (RuntimeException exception) {
+            log.error(
+                    "Не удалось получить демонстрационные сведения банка — проект={}",
+                    project,
+                    SafeDiagnostics.exception(exception));
             throw new ApiException(ApiError.BANK_DEMO_UNAVAILABLE);
         }
         if (!Set.of("FOUND", "EXPIRED").contains(approval))

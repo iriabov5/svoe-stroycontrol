@@ -30,7 +30,7 @@ class StorageConfig {
      */
     @Bean(destroyMethod = "close")
     S3Client s3Client(
-            @Value("${storage.endpoint:http://localhost:9000}") String endpoint,
+            @Value("${storage.endpoint:http://localhost:19001}") String endpoint,
             @Value("${storage.access-key:local-stroycontrol}") String accessKey,
             @Value("${storage.secret-key:local-demo-storage-password}") String secretKey) {
         return S3Client.builder()

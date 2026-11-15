@@ -187,7 +187,7 @@ for (const financing of ["OWN_FUNDS", "RSHB_RURAL_MORTGAGE"] as const) {
       await accessible(page);
       await expect(
         page.getByRole("img", { name: "РСХБ Цифра", exact: true }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       expect(submission.id).toBeTruthy();
       const stageRoot = `/api/v1${root}/stages/${stage.id}`;
       await schema(

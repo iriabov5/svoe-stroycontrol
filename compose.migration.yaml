@@ -1,0 +1,12 @@
+# Только для разового переноса ранее созданного тома MinIO. Не используется штатным запуском.
+services:
+  minio:
+    image: svoe-stroycontrol-minio:local
+    build: ./infra/minio
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-local-stroycontrol}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
+    ports:
+      - "127.0.0.1:19002:9000"
+    volumes:
+      - attachments-data:/data

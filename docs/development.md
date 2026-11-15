@@ -1,6 +1,8 @@
 # Запуск и диагностика
 
-Реализованы регистрация двух ролей, сессии браузера, карточки домов с назначением подрядчика и этапы строительства с плановыми и фактическими датами. Сначала зарегистрируйте аккаунт; готовых пользователей в базе нет.
+Реализованы регистрация двух ролей, сессии браузера, карточки домов с назначением подрядчика и этапы строительства с плановыми и фактическими датами. В новой базе аккаунты создаются через регистрацию. В существующем локальном томе сохраняются ранее зарегистрированные пользователи и демонстрационные объекты.
+
+Если переходите с прежнего MinIO и уже есть вложения, сначала выполните [перенос файлов](#перенос-существующих-вложений-из-minio).
 
 Из корня репозитория:
 
@@ -12,25 +14,98 @@ docker compose logs backend
 
 Frontend доступен на http://localhost:8088, состояние backend — на http://localhost:8080/actuator/health. PostgreSQL доступен на порту 5432. Синтетические локальные реквизиты БД заданы в Compose. Команда `docker compose down` останавливает сервисы, сохраняя данные в томе.
 
-Для локальной разработки backend:
+## Локальная разработка в IntelliJ IDEA
+
+Backend и frontend запускаются отдельными процессами из IDEA. В Docker остаются PostgreSQL и SeaweedFS. Профиль [`application-local.yaml`](../backend/src/main/resources/application-local.yaml) сохраняет общие настройки Flyway, JPA, сессий и загрузок из `application.yml`, заменяя адреса инфраструктуры на локальные.
+
+### 1. Подготовить инфраструктуру
+
+Нужны JDK **25**, Node.js **26.13.1** и Docker с Compose. Откройте корень репозитория в IDEA. Добавьте `backend/build.gradle.kts` как Gradle-проект, если IDE не предложила импорт автоматически. В Project SDK и Gradle JVM выберите JDK 25; Gradle используйте из Wrapper.
+
+Если `.env` ещё нет, скопируйте `.env.example` в `.env` и замените `STORAGE_SECRET_KEY` собственным случайным паролем. Уже существующий `.env` и ключ хранилища сохраняйте. Для локального профиля используйте строки `KEY=value` без `export` и кавычек: Spring читает этот файл как Java properties. Системные переменные окружения имеют приоритет над значениями файла.
+
+В терминале IDEA из **корня репозитория**:
 
 ```sh
-docker compose up -d postgres
-cd backend
-./gradlew bootRun
+# Если до этого запускали всё приложение в Docker, освободите его порты.
+docker compose stop frontend backend
+
+# Запустите только БД и хранилище, сохранив существующие тома.
+docker compose -f compose.yaml -f compose.local.yaml up -d --build --wait postgres s3
 ```
 
-Gradle Wrapper использует Java toolchain 25. Локальная JVM запуска Gradle может отличаться; резолвер toolchain настроен в `backend/settings.gradle.kts`.
+S3 SeaweedFS публикуется только на `127.0.0.1:19001`; PostgreSQL — на `localhost:5432`. Если порты заняты, задайте `POSTGRES_PORT` и `STORAGE_PORT` в корневом `.env`: Compose и локальный профиль прочитают одинаковые значения. При первом запуске Docker скачает закреплённый образ SeaweedFS 4.52, как в SecureShare; собирать Go-исходники не требуется. Если ранее был MinIO с вложениями, сначала выполните [перенос файлов](#перенос-существующих-вложений-из-minio). Не используйте `down -v`: эта команда удаляет данные.
 
-Для frontend в отдельном терминале, с Node.js 26.13.1 из design:
+### 2. Запустить backend из IDEA
+
+Откройте `SvoeStroycontrolApplication` и создайте конфигурацию кнопкой запуска рядом с `main`. В **Run → Edit Configurations** задайте:
+
+| Поле | Значение |
+| --- | --- |
+| Тип | Spring Boot; при отсутствии этого типа — Application |
+| Имя | СтройКонтроль Backend local |
+| Main class | `ru.rshb.stroycontrol.SvoeStroycontrolApplication` |
+| JRE | JDK 25 |
+| Classpath/module | основной модуль импортированного backend (`main`) |
+| Working directory | корень репозитория либо папка `backend` |
+| Program arguments | `--spring.profiles.active=local` |
+
+В конфигурации Spring Boot вместо аргумента можно задать **Active profiles: `local`**. Достаточно одного из этих способов. Удалите из конфигурации старые переменные `SPRING_DATASOURCE_URL` / `STORAGE_ENDPOINT` с Docker-адресами `postgres` и `s3`, если они были заданы.
+
+Нажмите **Run** или **Debug**. Профиль автоматически читает `.env` при рабочей папке в корне репозитория или в `backend`. Переменные окружения IDEA также поддерживаются. Backend доступен на http://localhost:8080, проверка готовности — http://localhost:8080/actuator/health. Flyway применяет недостающие миграции к существующей БД. При перезапуске backend потребуется заново войти в аккаунт.
+
+Если IDE не видит сгенерированные Lombok методы, синхронизируйте Gradle-проект и включите **Settings → Build, Execution, Deployment → Compiler → Annotation Processors → Enable annotation processing**.
+
+### 3. Запустить frontend из IDEA
+
+В терминале один раз установите зависимости:
 
 ```sh
 cd frontend
 npm ci --include=optional
+```
+
+В **Run → Edit Configurations → + → npm** создайте конфигурацию:
+
+| Поле | Значение |
+| --- | --- |
+| Имя | СтройКонтроль Frontend local |
+| package.json | `frontend/package.json` |
+| Command | `run` |
+| Scripts | `dev` |
+| Node interpreter | Node.js 26.13.1 |
+
+Нажмите **Run** и откройте адрес из консоли Vite — обычно http://localhost:5173. Работайте через этот адрес: Vite проксирует `/api` на backend `localhost:8080`, поэтому браузерная сессия и CSRF работают без отдельной настройки CORS. Если npm-конфигурация недоступна в установленной редакции IDEA, выполните `npm run dev` в её терминале.
+
+Frontend обновляется при сохранении исходников. Для одновременного запуска после подготовки инфраструктуры можно создать конфигурацию **Compound** с двумя конфигурациями приложения. Не добавляйте долго работающий backend как шаг **Before launch** frontend: он не завершится и задержит старт frontend.
+
+### Запуск без конфигураций IDEA
+
+После запуска инфраструктуры — в двух терминалах:
+
+```sh
+# Первый терминал, из корня репозитория.
+cd backend
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+```sh
+# Второй терминал, из корня репозитория.
+cd frontend
 npm run dev
 ```
 
-Vite проксирует `/api` на localhost:8080. Нативный компилятор TypeScript требует optional-пакет для текущей платформы; при его отсутствии повторите `npm ci --include=optional`. Файл `.npmrc` нужен генератору типов OpenAPI; причина описана в design.
+Нативный компилятор TypeScript требует optional-пакет для текущей платформы; при его отсутствии повторите `npm ci --include=optional`. Gradle Wrapper использует Java toolchain 25; резолвер настроен в `backend/settings.gradle.kts`.
+
+### Остановка и возврат к Docker
+
+Остановите backend и frontend кнопками **Stop** в IDEA. Инфраструктуру можно оставить включённой либо остановить без удаления томов:
+
+```sh
+docker compose -f compose.yaml -f compose.local.yaml stop postgres s3
+```
+
+Чтобы снова запустить всё в Docker, освободите порт 8080 остановкой backend в IDEA и выполните `docker compose up -d --build --wait` из корня репозитория.
 
 ## Отдельный стенд с новой базой
 
@@ -63,7 +138,7 @@ docker compose -p stroycontrol-acceptance down
 
 Локальный HTTP Mock API банка запускается внутри backend и слушает только loopback на временном порту. Реальный Интернет-банк РСХБ не вызывается. Настройка `BANK_DEMO_SCENARIO` принимает `FOUND` (по умолчанию), `NOT_FOUND`, `EXPIRED`, `ERROR`; для `bootRun` можно передать её как переменную окружения. В Compose передавайте её сервису backend через environment или локальный override. Это стендовая настройка, не поле пользовательской формы. В demo-ответе только вымышленные сведения; банковских секретов нет.
 
-Текстовая смета, версии договора, решения и HTTPS-ссылки на картинки сохраняются в PostgreSQL. Сервис не скачивает и не хранит оригиналы изображений; при ошибке внешнего источника показывает подпись. Закрытые загрузки журнала и банковских дополнений обслуживаются модулем files и контейнером MinIO.
+Текстовая смета, версии договора, решения, порядок и подписи иллюстраций сохраняются в PostgreSQL. Изображения сметы загружаются с устройства в закрытое хранилище SeaweedFS; предпросмотр и увеличенный просмотр доступны через приложение. Прежние внешние HTTPS-иллюстрации сохраняются, сервер их не скачивает. Журнал и банковские дополнения используют тот же файловый модуль.
 
 ## Продолжение после журнала этапа
 
@@ -75,16 +150,81 @@ docker compose -p stroycontrol-acceptance down
 
 ## Закрытые вложения
 
-Перед запуском создайте `.env` по `.env.example` и задайте собственный случайный `STORAGE_SECRET_KEY`; `.env` исключён из Git. Compose передаёт ключи хранилищу и backend. Бакет `stroycontrol-private` создаётся закрытым при первой загрузке, порт S3 и консоль не публикуются на хост. Байты хранятся в `attachments-data`, метаданные — в PostgreSQL. `docker compose down` сохраняет volumes; не добавляйте `-v`, если нужны данные.
+Перед запуском создайте `.env` по `.env.example` и задайте собственный случайный `STORAGE_SECRET_KEY`; `.env` исключён из Git. Одинаковые ключи передаются backend и SeaweedFS mini. Бакет `stroycontrol-private` создаётся при старте mini, анонимный доступ запрещён. Основной Compose не публикует S3 или внутренние порты; `compose.local.yaml` публикует только S3 на loopback для IDEA. Байты и внутренние метаданные SeaweedFS хранятся в `seaweedfs-data`, прикладные метаданные — в PostgreSQL.
 
-Образ `svoe-stroycontrol-minio:local` собирается из официального коммита `7aac2a2c5b7c882e68c1ce017d8256be2feea27f` в `infra/minio/Dockerfile`. Первая сборка требует загрузки Go-зависимостей; последующие используют Docker cache. Для интеграционных тестов предварительно выполните `docker compose build minio`.
+Используется `chrislusf/seaweedfs:4.52`, команда `mini -dir=/data`, по образцу SecureShare. Интеграционные тесты используют тот же образ, предварительная сборка MinIO больше не нужна. `STORAGE_PORT` заменяет прежнее локальное имя `MINIO_PORT`; по умолчанию порт остаётся 19001. В `.env` достаточно переименовать эту настройку, если вы меняли порт.
 
-Репозиторий MinIO Community [архивирован владельцем](https://github.com/minio/minio); сборка из закреплённых исходников используется для локального MVP. S3-адаптер изолирует хранилище от бизнес-модулей. Для промышленного развёртывания выбор поддерживаемого сервера и обновлений требует отдельного решения.
+### Перенос существующих вложений из MinIO
+
+Этот порядок нужен только для стенда с прежними вложениями. Новый стенд начинает с пустого SeaweedFS. Не запускайте новый backend с пустым хранилищем вместо старого: миграция БД не переносит байты. Не переиспользуйте бинарный том MinIO как том SeaweedFS и не удаляйте `attachments-data`.
+
+1. Остановите backend/frontend и их процессы в IDEA; это также остановит уборку файлов. Сохраните резервную копию БД и старого тома. Имя Compose-проекта должно совпадать с прежним запуском.
+2. Поднимите исходное хранилище для переноса и новое, без backend. `compose.migration.yaml` использует прежний том и образ только как источник, публикуя его на loopback:19002:
+
+```sh
+docker compose stop frontend backend
+mkdir -p output/storage-migration
+docker compose exec -T postgres pg_dump -U stroycontrol -d stroycontrol -Fc > output/storage-migration/database.dump
+docker compose -f compose.yaml -f compose.local.yaml -f compose.migration.yaml up -d postgres minio s3
+```
+
+3. Используйте установленный `rclone`. Через `rclone config` настройте два S3 remote: `old-storage` с endpoint `http://127.0.0.1:19002` и `new-storage` с endpoint `http://127.0.0.1:19001` (или вашим STORAGE_PORT). В обоих укажите ключи из локального `.env`, region `us-east-1`, provider `Other` и path-style. Не добавляйте конфигурацию rclone с ключами в Git. В командах ниже используется стандартное имя бакета; если меняли STORAGE_BUCKET, подставьте его.
+
+4. Скопируйте все объекты вместе с пользовательскими metadata. Повтор не должен перезаписывать отличающиеся объекты. Проверьте фактические байты обоих хранилищ, не только ETag:
+
+```sh
+rclone copy old-storage:stroycontrol-private new-storage:stroycontrol-private --metadata --immutable
+rclone check old-storage:stroycontrol-private new-storage:stroycontrol-private --download
+```
+
+5. Выгрузите перечень READY-файлов из БД и сравните размер/SHA-256 каждого вычитанного объекта. Серверные object key состоят из UUID и `/`, CSV здесь не содержит пользовательских имён. UPLOADING/FAILED/DELETING и лишние объекты нужно отдельно перечислить при сверке, не удаляя их автоматически.
+
+```sh
+docker compose exec -T postgres psql -U stroycontrol -d stroycontrol -c "COPY (SELECT object_key,size,sha256 FROM attachments WHERE state='READY' ORDER BY object_key) TO STDOUT WITH CSV" > output/storage-migration/ready.csv
+(
+  migration_file=$(mktemp)
+  trap 'rm -f "$migration_file"' EXIT
+  while IFS=, read -r object_key expected_size expected_hash; do
+    rclone cat "new-storage:stroycontrol-private/$object_key" > "$migration_file" || exit 1
+    actual_size=$(wc -c < "$migration_file" | tr -d ' ')
+    test "$actual_size" = "$expected_size" || exit 1
+    printf '%s  %s\n' "$expected_hash" "$migration_file" | shasum -a 256 -c - || exit 1
+  done < output/storage-migration/ready.csv
+)
+```
+
+Любое отсутствие READY-объекта, несовпадение или ошибка команды блокирует переключение. Сохраните результаты сверки в `output/storage-migration` вне Git. После успешной проверки переключите endpoint, проверьте чтение прежних фото/PDF, новую загрузку, анонимный отказ и сохранность после перезапуска, затем допускайте пользователей. До открытия записи можно вернуться к прежнему endpoint `http://127.0.0.1:19002` из IDEA или `http://minio:9000` в миграционном Compose. После новых загрузок возврат требует обратного копирования и сверки; просто менять endpoint нельзя. Исходное хранилище и резервные копии автоматически не удаляются.
 
 ## Сдача и локальный демо-банк
 
 Миграции V8–V10 добавляют аренду загрузки, приёмку, завершение и банковскую доставку. Обновляйте приложение без удаления томов. Сценарий Compose задаётся `BANK_STAGE_SCENARIO`: `NEEDS_INFORMATION` по умолчанию (первая версия требует дополнения), `ACCEPTED`, `ERROR` или `TIMEOUT_AFTER_RECEIPT`. Это только локальная симуляция; реальные сведения в банк не уходят.
 
-`docker compose build backend frontend` и `docker compose up -d --no-build` обновляют приложение без повторной сборки уже готового образа MinIO. Статусы и подтверждения сохраняются в PostgreSQL, бинарные объекты — в закрытом бакете.
+`docker compose build backend frontend` и `docker compose up -d --no-build` обновляют приложение без сборки самого хранилища. Статусы и подтверждения сохраняются в PostgreSQL, бинарные объекты — в закрытом бакете.
 
 Проверка Java-стиля без приложения: `cd backend` и `./gradlew javaFormatCheck javaImportCheck javadoc`. Форматирование: `./gradlew javaFormat` (google-java-format 2.0.0, AOSP, 4 пробела).
+
+## Журнал запросов backend
+
+Прикладные сообщения SLF4J выводятся на русском языке. Каждая итоговая запись содержит метод, шаблон маршрута, фактический HTTP-статус, длительность в миллисекундах и публичный код ошибки, когда он есть. Поле `запрос` связывает сообщения одного HTTP-вызова. Для запросов, отклонённых до определения MVC-маршрута, может выводиться «маршрут не определён».
+
+| Уровень | Когда используется |
+| --- | --- |
+| INFO | Итог API-запроса со статусом 2xx–4xx, включая чтение данных и ожидаемые ошибки пользователя |
+| DEBUG | Успешная проверка health и получение CSRF-токена |
+| ERROR | Итог запроса 5xx и диагностика технических ошибок HTTP, S3 и банковских обработчиков |
+
+Ожидаемые ошибки 4xx записываются без стека. При техническом сбое сохраняются тип исключения, кадры стека и типы причин. Тексты исключений внешних систем исключаются, поскольку могут содержать секреты и банковские данные. Одна запись причины и итог запроса связаны идентификатором. Фоновая банковская доставка и уборка файлов используют технический идентификатор отправки или файла.
+
+Для включения DEBUG у прикладного пакета добавьте переменную окружения в конфигурацию запуска backend в IDEA.
+
+```text
+LOGGING_LEVEL_RU_RSHB_STROYCONTROL=DEBUG
+```
+
+Затем перезапустите backend. Для обычного режима задайте `INFO` либо удалите переменную. По умолчанию используется INFO. Тела запросов и ответов, query-параметры, пароли, токены, cookies, банковские сведения, названия и содержимое файлов в прикладной журнал не включаются.
+
+Пример итоговой записи для успешного чтения дома выглядит следующим образом.
+
+```text
+INFO [запрос=<внутренний UUID>] HTTP-запрос завершён — метод=GET, маршрут=/api/v1/projects/{id}, статус=200, времяМс=12, код=—
+```

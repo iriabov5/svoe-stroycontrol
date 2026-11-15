@@ -8,7 +8,8 @@ const formatFileSize = (size: number) =>
 
 export type Attachment = components["schemas"]["Attachment"];
 export type PendingFile = {
-  file: File;
+  file?: File;
+  image?: { url: string; attachmentId?: string | null };
   caption: string;
   key: string;
   uploaded?: Attachment;
@@ -17,10 +18,11 @@ export type PendingFile = {
 export async function uploadFile(
   projectId: string,
   stageId: string | null,
-  purpose: "JOURNAL" | "BANK",
+  purpose: "JOURNAL" | "BANK" | "PROPOSAL",
   item: PendingFile,
 ): Promise<Attachment> {
   if (item.uploaded) return item.uploaded;
+  if (!item.file) throw new Error("Выберите файл для загрузки");
   const csrf = await request<components["schemas"]["CsrfToken"]>("/auth/csrf");
   const body = new FormData();
   body.append("file", item.file);
@@ -48,25 +50,44 @@ export async function uploadFile(
   return response.json();
 }
 
+function captionLabel(file?: File) {
+  if (file?.type.startsWith("image/")) return "Подпись загруженной фотографии";
+  return "Пояснение к документу";
+}
+
 export function FilePicker({
   items,
   onChange,
   disabled = false,
   idPrefix = "journal-files",
   externalError,
+  imagesOnly = false,
 }: Readonly<{
   items: PendingFile[];
   onChange: (items: PendingFile[]) => void;
   disabled?: boolean;
   idPrefix?: string;
   externalError?: string;
+  imagesOnly?: boolean;
 }>) {
   const [error, setError] = useState("");
   function select(files: FileList | null) {
     if (!files) return;
     const chosen = Array.from(files);
+    const imageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (
+      imagesOnly &&
+      chosen.some((f) => !imageTypes.has(f.type) || f.size === 0)
+    ) {
+      setError("Выберите непустое изображение JPEG, PNG или WebP");
+      return;
+    }
     if (chosen.length + items.length > 10) {
-      setError("На запись можно добавить до 10 файлов");
+      setError(
+        imagesOnly
+          ? "В смету можно добавить до 10 изображений"
+          : "На запись можно добавить до 10 файлов",
+      );
       return;
     }
     if (
@@ -74,7 +95,11 @@ export function FilePicker({
         (f) => f.size > (f.type === "application/pdf" ? 20 : 10) * 1024 * 1024,
       )
     ) {
-      setError("Фото — до 10 МиБ, PDF — до 20 МиБ");
+      setError(
+        imagesOnly
+          ? "Изображение — до 10 МиБ"
+          : "Фото — до 10 МиБ, PDF — до 20 МиБ",
+      );
       return;
     }
     setError("");
@@ -87,14 +112,26 @@ export function FilePicker({
       })),
     ]);
   }
+  function move(index: number, offset: number) {
+    const next = [...items];
+    [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    onChange(next);
+  }
   return (
     <div className="file-picker">
       <label className="file-picker-label">
         {" "}
-        <span>Добавить фото или PDF</span>{" "}
+        <span>
+          {imagesOnly ? "Добавить изображения" : "Добавить фото или PDF"}
+        </span>{" "}
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
+          className="sr-only"
+          accept={
+            imagesOnly
+              ? "image/jpeg,image/png,image/webp"
+              : "image/jpeg,image/png,image/webp,application/pdf"
+          }
           multiple
           disabled={disabled || items.length >= 10}
           onChange={(e) => {
@@ -110,8 +147,9 @@ export function FilePicker({
         />
       </label>
       <p id={idPrefix + "-limits"} className="hint">
-        Фото — до 10 МиБ, PDF — до 20 МиБ. До 10 файлов на запись. Доступ только
-        участникам стройки.
+        {imagesOnly
+          ? "JPEG, PNG или WebP — до 10 МиБ каждый. До 10 изображений. Укажите подпись к каждому."
+          : "Фото — до 10 МиБ, PDF — до 20 МиБ. До 10 файлов на запись. Доступ только участникам стройки."}
       </p>
       {(error || externalError) && (
         <p id={idPrefix + "-error"} role="alert" className="field-error">
@@ -120,23 +158,30 @@ export function FilePicker({
       )}
       {items.map((item, i) => (
         <div className="file-preview" key={item.key}>
-          {item.file.type.startsWith("image/") && (
-            <LocalPreview file={item.file} />
+          {item.file?.type.startsWith("image/") && (
+            <LocalPreview file={item.file} caption={item.caption} />
+          )}
+          {item.image && (
+            <Illustration
+              url={item.image.url}
+              caption={item.caption}
+              compact
+              external={!item.image.attachmentId}
+              imageLabel
+            />
           )}
           <div className="file-preview-body">
-            <strong>{item.file.name}</strong>
+            <strong>{item.file?.name ?? `Изображение ${i + 1}`}</strong>
             <small>
-              {formatFileSize(item.file.size)}
+              {item.file ? formatFileSize(item.file.size) : "Сохранено"}
               {item.uploaded ? " · Загружен" : ""}
             </small>
             <Field
               id={idPrefix + "-caption-" + i}
               label={
-                item.file.type.startsWith("image/")
-                  ? "Подпись загруженной фотографии"
-                  : "Пояснение к документу"
+                imagesOnly ? "Подпись изображения" : captionLabel(item.file)
               }
-              required={item.file.type.startsWith("image/")}
+              required={imagesOnly || item.file?.type.startsWith("image/")}
               maxLength={300}
               value={item.caption}
               disabled={disabled}
@@ -147,8 +192,8 @@ export function FilePicker({
                       ? {
                           ...f,
                           caption: e.target.value,
-                          key: crypto.randomUUID(),
-                          uploaded: undefined,
+                          key: imagesOnly ? f.key : crypto.randomUUID(),
+                          uploaded: imagesOnly ? f.uploaded : undefined,
                         }
                       : f,
                   ),
@@ -161,26 +206,54 @@ export function FilePicker({
               disabled={disabled}
               onClick={() => onChange(items.filter((_, j) => j !== i))}
             >
-              Убрать {item.file.name}
+              {imagesOnly ? "Убрать из сметы" : `Убрать ${item.file?.name}`}
             </button>
+            {imagesOnly && (
+              <div className="actions">
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={disabled || i === 0}
+                  aria-label={`Переместить изображение ${i + 1} выше`}
+                  onClick={() => move(i, -1)}
+                >
+                  Выше
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={disabled || i === items.length - 1}
+                  aria-label={`Переместить изображение ${i + 1} ниже`}
+                  onClick={() => move(i, 1)}
+                >
+                  Ниже
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ))}
     </div>
   );
 }
-function LocalPreview({ file }: Readonly<{ file: File }>) {
+function LocalPreview({
+  file,
+  caption,
+}: Readonly<{ file: File; caption: string }>) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     const local = URL.createObjectURL(file);
     setUrl(local);
     return () => URL.revokeObjectURL(local);
   }, [file]);
+  if (!url) return null;
   return (
-    <img
-      src={url}
-      alt="Предпросмотр выбранной фотографии"
-      className="file-thumbnail"
+    <Illustration
+      url={url}
+      caption={caption || "Предпросмотр выбранной фотографии"}
+      compact
+      external={false}
+      imageLabel
     />
   );
 }

@@ -15,19 +15,21 @@ services:
       timeout: 5s
       retries: 20
 
-  minio:
-    image: svoe-stroycontrol-minio:local
-    build: ./infra/minio
+  s3:
+    image: chrislusf/seaweedfs:4.52
+    command: ["mini", "-dir=/data"]
     environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-local-stroycontrol}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY:-local-stroycontrol}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
+      S3_BUCKET: ${STORAGE_BUCKET:-stroycontrol-private}
     volumes:
-      - attachments-data:/data
+      - seaweedfs-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "code=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8333/); test \"$$code\" = 401 || test \"$$code\" = 403"]
       interval: 5s
       timeout: 5s
       retries: 20
+      start_period: 15s
 
   backend:
     build: ./backend
@@ -35,15 +37,15 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stroycontrol
       SPRING_DATASOURCE_USERNAME: stroycontrol
       SPRING_DATASOURCE_PASSWORD: stroycontrol
-      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ENDPOINT: http://s3:8333
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-local-stroycontrol}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
-      STORAGE_BUCKET: stroycontrol-private
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-stroycontrol-private}
       BANK_STAGE_SCENARIO: ${BANK_STAGE_SCENARIO:-NEEDS_INFORMATION}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -66,4 +68,6 @@ services:
 
 volumes:
   postgres-data:
+  seaweedfs-data:
+  # Старый том сохраняется для разового переноса и возврата, новое приложение его не использует.
   attachments-data:

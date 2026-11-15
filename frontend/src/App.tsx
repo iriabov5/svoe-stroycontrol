@@ -181,7 +181,10 @@ export function App() {
       >
         К содержимому
       </a>
-      <header className="site-header" inert={profileRequired || undefined}>
+      <header
+        className={account ? "site-header" : "site-header auth-header"}
+        inert={profileRequired || undefined}
+      >
         <div className="header-inner">
           <div className="brand-suite">
             <a
@@ -198,7 +201,7 @@ export function App() {
               </span>
             </a>
             <div className="header-bank-mark">
-              <BrandMark variant="bank" />
+              <BrandMark />
             </div>
           </div>
           {account ? (
@@ -239,6 +242,7 @@ export function App() {
       </header>
       <main
         id="main-content"
+        className={account ? undefined : "auth-main"}
         tabIndex={-1}
         inert={profileRequired || undefined}
       >
@@ -288,17 +292,6 @@ export function App() {
           </div>
         </dialog>
       )}
-      <footer className="site-footer" inert={profileRequired || undefined}>
-        <div className="footer-product">
-          <strong>СВОЁ СтройКонтроль</strong>
-          <span>Общее пространство вашего строительства</span>
-        </div>
-        <div className="footer-brand-marks" aria-label="РСХБ и РСХБ Цифра">
-          <BrandMark variant="bank" />
-          <span className="brand-divider" aria-hidden="true" />
-          <BrandMark variant="digital" />
-        </div>
-      </footer>
     </>
   );
 }

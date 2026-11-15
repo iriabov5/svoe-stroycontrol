@@ -267,9 +267,20 @@ it("согласование договора показывает отдель�
     screen.getByText(/Подтвердить согласование этой версии договора/),
   ).toBeTruthy();
 });
-it("ключи иллюстраций остаются локальными и не попадают в сохраняемую смету", async () => {
+it("сохранённая картинка сметы передаётся по ID без URL и локального ключа", async () => {
   const user = userEvent.setup();
-  documentData({ ...submittedProposal, state: "DRAFT", stages: [] });
+  documentData({
+    ...submittedProposal,
+    state: "DRAFT",
+    stages: [],
+    images: [
+      {
+        attachmentId: "image-id",
+        url: "/api/v1/projects/house/attachments/image-id/content",
+        caption: "План дома",
+      },
+    ],
+  });
   render(
     <Preparation
       project={{ ...project, requestSubmitted: true }}
@@ -277,14 +288,9 @@ it("ключи иллюстраций остаются локальными и �
       onChanged={vi.fn()}
     />,
   );
-  await user.click(
-    await screen.findByRole("button", { name: "Добавить изображение" }),
-  );
-  await user.type(
-    screen.getByLabelText("Ссылка на изображение"),
-    "https://example.test/plan.png",
-  );
-  await user.type(screen.getByLabelText("Подпись изображения"), "План дома");
+  const caption = await screen.findByLabelText("Подпись изображения");
+  await user.clear(caption);
+  await user.type(caption, "План первого этажа");
   await user.click(
     screen.getByRole("button", { name: "Сохранить предложение" }),
   );
@@ -293,7 +299,7 @@ it("ключи иллюстраций остаются локальными и �
     .mock.calls.find(([, method]) => method === "PUT");
   expect(saved?.[2]).toEqual(
     expect.objectContaining({
-      images: [{ url: "https://example.test/plan.png", caption: "План дома" }],
+      images: [{ attachmentId: "image-id", caption: "План первого этажа" }],
     }),
   );
 });

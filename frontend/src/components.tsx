@@ -73,15 +73,17 @@ export function PageTitle({
   eyebrow,
   children,
   description,
+  focusOnMount = true,
 }: Readonly<{
   eyebrow: string;
   children: ReactNode;
   description: string;
+  focusOnMount?: boolean;
 }>) {
   const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-  }, [children]);
+    if (focusOnMount) ref.current?.focus();
+  }, [children, focusOnMount]);
   return (
     <div className="page-title">
       <p className="eyebrow">{eyebrow}</p>
@@ -147,17 +149,28 @@ export function Illustration({
   url,
   caption,
   compact = false,
+  external = !compact,
+  imageLabel = false,
 }: Readonly<{
   url: string;
   caption: string;
   compact?: boolean;
+  external?: boolean;
+  imageLabel?: boolean;
 }>) {
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const trigger = useRef<HTMLButtonElement>(null);
+  function retry() {
+    setFailed(false);
+    setAttempt((value) => value + 1);
+  }
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => setFailed(false), [url]);
   const image = (
     <img
+      key={attempt}
       src={url}
       alt={caption}
       referrerPolicy="no-referrer"
@@ -167,14 +180,28 @@ export function Illustration({
   );
   function renderIllustration() {
     if (failed) {
-      return <p>Изображение недоступно</p>;
+      return (
+        <>
+          <p>
+            {imageLabel
+              ? "Не удалось показать изображение"
+              : "Изображение недоступно"}
+          </p>
+          <button type="button" className="text-button" onClick={retry}>
+            Повторить
+          </button>
+        </>
+      );
     }
     if (compact) {
       return (
         <button
           type="button"
+          ref={trigger}
           className="photo-trigger"
-          aria-label={"Открыть фото: " + caption}
+          aria-label={
+            (imageLabel ? "Открыть изображение: " : "Открыть фото: ") + caption
+          }
           onClick={() => dialog.current?.showModal()}
         >
           {image}
@@ -187,14 +214,19 @@ export function Illustration({
     <figure className={compact ? "journal-photo" : "proposal-image"}>
       {renderIllustration()}
       <figcaption>{caption}</figcaption>
-      {!compact && (
+      {external && (
         <small>
           Изображение из внешнего источника может измениться или стать
           недоступным.
         </small>
       )}
       {compact && (
-        <dialog ref={dialog} className="photo-dialog" aria-labelledby={titleId}>
+        <dialog
+          ref={dialog}
+          className="photo-dialog"
+          aria-labelledby={titleId}
+          onClose={() => trigger.current?.focus()}
+        >
           <h3 id={titleId}>{caption}</h3>
           {failed ? (
             <p>Изображение недоступно</p>
@@ -211,7 +243,7 @@ export function Illustration({
             className="button secondary"
             onClick={() => dialog.current?.close()}
           >
-            Закрыть фото
+            {imageLabel ? "Закрыть изображение" : "Закрыть фото"}
           </button>
         </dialog>
       )}

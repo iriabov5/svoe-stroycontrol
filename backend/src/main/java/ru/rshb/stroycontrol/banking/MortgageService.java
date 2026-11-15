@@ -5,6 +5,7 @@ import static ru.rshb.stroycontrol.common.PreparationInput.require;
 import static ru.rshb.stroycontrol.common.PreparationInput.version;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import org.springframework.web.client.RestClient;
 
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.common.SafeDiagnostics;
 import ru.rshb.stroycontrol.projects.MortgageRequests;
 import ru.rshb.stroycontrol.projects.Projects;
 
@@ -32,6 +34,7 @@ import java.util.UUID;
  * блокировкой проекта. Снимок и результат импорта фиксируются атомарно.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 class MortgageService {
     private static final String STATE_FOUND = "FOUND";
@@ -122,7 +125,11 @@ class MortgageService {
         try {
             response = client.get().uri(mock.url()).retrieve().body(Map.class);
             validate(response);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException exception) {
+            log.error(
+                    "Не удалось получить демонстрационные сведения банка — проект={}",
+                    project,
+                    SafeDiagnostics.exception(exception));
             throw new ApiException(ApiError.BANK_DEMO_UNAVAILABLE);
         }
         final var bank = response;

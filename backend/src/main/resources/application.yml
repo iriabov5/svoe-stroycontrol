@@ -41,7 +41,7 @@ management:
         enabled: true
 
 storage:
-  endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+  endpoint: ${STORAGE_ENDPOINT:http://localhost:19001}
   access-key: ${STORAGE_ACCESS_KEY:local-stroycontrol}
   secret-key: ${STORAGE_SECRET_KEY:unused-test-secret}
   bucket: ${STORAGE_BUCKET:stroycontrol-private}
@@ -49,3 +49,9 @@ storage:
 bank:
   stage:
     scenario: ${BANK_STAGE_SCENARIO:ACCEPTED}
+
+logging:
+  level:
+    ru.rshb.stroycontrol: INFO
+  pattern:
+    level: "%5p [запрос=%X{requestId:-—}]"

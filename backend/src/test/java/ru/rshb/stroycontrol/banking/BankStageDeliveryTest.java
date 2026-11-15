@@ -32,8 +32,8 @@ import java.util.UUID;
 class BankStageDeliveryTest {
     @ParameterizedTest(name = "Ответ банка: {0}")
     @NullSource
-    @ValueSource(strings = {"BROKEN"})
-    @DisplayName("Неверная или пустая квитанция оставляет пакет для безопасного повтора")
+    @ValueSource(strings = {"BROKEN", "THROWS"})
+    @DisplayName("Пустая квитанция или технический сбой оставляют пакет для безопасного повтора")
     void invalidReceiptRemainsUnknown(String state) {
         var repository = mock(BankStageRepository.class);
         var attempts = mock(BankStageAttemptRepository.class);
@@ -58,7 +58,12 @@ class BankStageDeliveryTest {
                 .thenReturn(Optional.of(attempt));
         BankStageGateway.Receipt receipt =
                 state == null ? null : new BankStageGateway.Receipt(state, "invalid", null);
-        when(gateway.deliver(row.getBankKey(), 0, null)).thenReturn(receipt);
+        if ("THROWS".equals(state)) {
+            when(gateway.deliver(row.getBankKey(), 0, null))
+                    .thenThrow(new IllegalStateException("secret-bank-response"));
+        } else {
+            when(gateway.deliver(row.getBankKey(), 0, null)).thenReturn(receipt);
+        }
         var service =
                 new BankStageService(
                         repository,

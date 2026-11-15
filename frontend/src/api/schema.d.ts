@@ -976,7 +976,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Загрузить закрытую фотографию или PDF до публикации записи */
+        /** Загрузить закрытое вложение сметы, журнала или банковского дополнения */
         post: operations["uploadAttachment"];
         delete?: never;
         options?: never;
@@ -991,7 +991,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Прочитать вложение с повторной проверкой прав участника */
+        /**
+         * Прочитать вложение с повторной проверкой прав участника
+         * @description PROPOSAL требует видимости версии сметы. Заказчик не получает изображения только из черновика; прежняя отправленная версия сохраняет доступ. Чужой файл или назначение — 404, неготовый — 409, сбой хранилища — 503.
+         */
         get: operations["downloadAttachment"];
         put?: never;
         post?: never;
@@ -1371,8 +1374,35 @@ export interface components {
             /** @enum {string|null} */
             financingSource?: "OWN_FUNDS" | "RSHB_RURAL_MORTGAGE" | null;
         };
+        /**
+         * @description Загруженное изображение либо сохранённая прежняя HTTPS-иллюстрация. Новый внешний URL запрещён. До 10 уникальных изображений на версию; подпись принадлежит версии сметы.
+         * @example {
+         *       "attachmentId": "00000000-0000-4000-8000-000000000001",
+         *       "caption": "План первого этажа, 8 × 10 м"
+         *     }
+         */
+        ProposalImageEdit: {
+            /**
+             * Format: uuid
+             * @description READY-файл PROPOSAL того же проекта
+             */
+            attachmentId: string;
+            caption: string;
+        } | {
+            /**
+             * Format: uri
+             * @description Только точный URL уже сохранённой иллюстрации текущей или исходной версии
+             */
+            url: string;
+            caption: string;
+        };
         ProposalImage: {
-            /** Format: uri */
+            /**
+             * Format: uuid
+             * @description ID закрытого файла; null для прежней внешней иллюстрации
+             */
+            attachmentId?: string | null;
+            /** @description Защищённый относительный URL backend либо прежний внешний HTTPS URL. Изображение inline; сессия и доступ к версии проверяются при каждом запросе, черновик скрыт от заказчика. */
             url: string;
             caption: string;
         };
@@ -1392,7 +1422,7 @@ export interface components {
             estimateText: string;
             termsText: string | null;
             totalPrice: number | null;
-            images: components["schemas"]["ProposalImage"][];
+            images: components["schemas"]["ProposalImageEdit"][];
             stages: components["schemas"]["ProposalStage"][];
         };
         DocumentCommand: {
@@ -6056,10 +6086,10 @@ export interface operations {
                     /** Format: uuid */
                     stageId?: string;
                     /**
-                     * @description JOURNAL требует stageId и доступа Работы; BANK — собственника ипотечного проекта
+                     * @description JOURNAL требует stageId и доступа Работы; BANK — собственника ипотечного проекта; PROPOSAL — редактируемой сметы и подготовки документов, без stageId, только JPEG/PNG/WebP до 10 МиБ
                      * @enum {string}
                      */
-                    purpose: "JOURNAL" | "BANK";
+                    purpose: "JOURNAL" | "BANK" | "PROPOSAL";
                     /** @description Для фото обязательна непустая подпись */
                     caption?: string;
                 };

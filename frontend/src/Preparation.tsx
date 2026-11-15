@@ -16,6 +16,7 @@ import {
 } from "./api/client";
 
 import type { components } from "./api/schema";
+import { FilePicker, uploadFile, type PendingFile } from "./Files";
 import { ActorLabel } from "./Participants";
 import { ReissuePanel } from "./Reissue";
 import { Field, Notice, Area, Illustration } from "./components";
@@ -1072,9 +1073,10 @@ function DocumentEditor({
     [price, setPrice] = useState(
       "totalPrice" in document ? document.totalPrice : null,
     ),
-    [images, setImages] = useState(() =>
+    [images, setImages] = useState<PendingFile[]>(() =>
       ("images" in document ? document.images : []).map((image) => ({
-        ...image,
+        image: { url: image.url, attachmentId: image.attachmentId },
+        caption: image.caption,
         key: crypto.randomUUID(),
       })),
     ),
@@ -1090,6 +1092,23 @@ function DocumentEditor({
     onBusy(true);
     setBusy(true);
     try {
+      const uploaded = [...images];
+      if (!contract) {
+        for (let i = 0; i < uploaded.length; i++) {
+          if (!uploaded[i].image && !uploaded[i].uploaded) {
+            uploaded[i] = {
+              ...uploaded[i],
+              uploaded: await uploadFile(
+                project.id,
+                null,
+                "PROPOSAL",
+                uploaded[i],
+              ),
+            };
+            setImages([...uploaded]);
+          }
+        }
+      }
       const body = contract
         ? { version: document.version, contractText: text }
         : {
@@ -1097,7 +1116,13 @@ function DocumentEditor({
             estimateText: text,
             termsText: terms || null,
             totalPrice: price,
-            images: images.map(({ url, caption }) => ({ url, caption })),
+            images: uploaded.map((item) => {
+              const attachmentId =
+                item.uploaded?.id ?? item.image?.attachmentId;
+              return attachmentId
+                ? { attachmentId, caption: item.caption }
+                : { url: item.image!.url, caption: item.caption };
+            }),
             stages: plans,
           };
       await request(
@@ -1122,7 +1147,7 @@ function DocumentEditor({
     setPlans(plans.map((v, i) => (i === index ? { ...v, ...p } : v)));
   function saveLabel() {
     if (busy) {
-      return "Сохраняем…";
+      return contract ? "Сохраняем…" : "Загружаем изображения и сохраняем…";
     }
     return "Сохранить " + (contract ? "договор" : "предложение");
   }
@@ -1132,8 +1157,9 @@ function DocumentEditor({
       aria-busy={busy}
       onChangeCapture={() => onDirty(true)}
       onClickCapture={(e) => {
-        if ((e.target as HTMLElement).closest('button[type="button"]'))
-          onDirty(true);
+        const target = e.target as HTMLElement;
+        if (target.closest("figure")) return;
+        if (target.closest('button[type="button"]')) onDirty(true);
       }}
     >
       {notice && <Notice>{notice}</Notice>}
@@ -1175,66 +1201,20 @@ function DocumentEditor({
             onChange={setTerms}
             maxLength={10000}
           />
-          <h3>Иллюстрации</h3>
-          <p className="hint">
-            Используйте HTTPS-ссылки на изображения, которыми можно делиться.
-            Загрузка файлов появится позже.
-          </p>
-          {images.map((im, i) => (
-            <fieldset key={im.key}>
-              <legend>Иллюстрация {i + 1}</legend>
-              <Field
-                id={"image-url-" + i}
-                label="Ссылка на изображение"
-                type="url"
-                pattern="https://.*"
-                maxLength={2048}
-                required
-                value={im.url}
-                onChange={(e) =>
-                  setImages(
-                    images.map((v, j) =>
-                      i === j ? { ...v, url: e.target.value } : v,
-                    ),
-                  )
-                }
-              />
-              <Field
-                id={"image-caption-" + i}
-                label="Подпись изображения"
-                required
-                maxLength={300}
-                value={im.caption}
-                onChange={(e) =>
-                  setImages(
-                    images.map((v, j) =>
-                      i === j ? { ...v, caption: e.target.value } : v,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setImages(images.filter((_, j) => j !== i))}
-              >
-                Удалить изображение {i + 1}
-              </button>
-            </fieldset>
-          ))}
-          <button
-            type="button"
-            className="button secondary"
-            disabled={images.length >= 10}
-            onClick={() =>
-              setImages([
-                ...images,
-                { key: crypto.randomUUID(), url: "", caption: "" },
-              ])
+          <h3>Изображения и планы</h3>
+          <FilePicker
+            items={images}
+            onChange={setImages}
+            disabled={busy}
+            imagesOnly
+            idPrefix="proposal-images"
+            externalError={
+              errors.file ??
+              errors.caption ??
+              errors.images ??
+              errors.attachmentIds
             }
-          >
-            Добавить изображение
-          </button>
+          />
           <h3>Этапы и сроки</h3>
           {errors.stages && (
             <p className="field-error" role="alert">
@@ -1402,7 +1382,14 @@ function DocumentContent({
           </>
         )}
         {current.images.map((im, i) => (
-          <Illustration key={im.url + i} url={im.url} caption={im.caption} />
+          <Illustration
+            key={im.attachmentId ?? im.url + i}
+            url={im.url}
+            caption={im.caption}
+            compact
+            external={!im.attachmentId}
+            imageLabel
+          />
         ))}
         <h3>График строительства</h3>
         <p className="hint">

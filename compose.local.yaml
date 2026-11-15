@@ -1,0 +1,6 @@
+# Дополнение к compose.yaml для запуска приложения из IDE.
+# Том БД сохраняется; прежние файлы MinIO сначала переносятся по docs/development.md.
+services:
+  s3:
+    ports:
+      - "127.0.0.1:${STORAGE_PORT:-19001}:8333"

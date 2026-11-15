@@ -11,6 +11,7 @@ import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
 import ru.rshb.stroycontrol.projects.MortgageRequests;
 import ru.rshb.stroycontrol.projects.Projects;
+import ru.rshb.stroycontrol.proposals.ProposalFiles;
 import ru.rshb.stroycontrol.stages.StageStatus;
 import ru.rshb.stroycontrol.stages.Stages;
 
@@ -25,6 +26,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 class FileTransactions implements Files {
+    private static final String PURPOSE_PROPOSAL = "PROPOSAL";
     private static final String STATE_DELETED = "DELETED";
     private static final String STATE_DELETING = "DELETING";
     private static final String STATE_READY = "READY";
@@ -34,6 +36,7 @@ class FileTransactions implements Files {
     private final Stages stages;
     private final MortgageRequests requests;
     private final Clock clock;
+    private final ProposalFiles proposalFiles;
 
     /**
      * Снимок намерения вне контекста JPA.
@@ -165,6 +168,10 @@ class FileTransactions implements Files {
             throw new ApiException(ApiError.ATTACHMENT_NOT_FOUND);
         if (a.getPurpose().equals("BANK") && !access.owner())
             throw new ApiException(ApiError.ATTACHMENT_NOT_FOUND);
+        if (a.getPurpose().equals(PURPOSE_PROPOSAL)
+                && !proposalFiles.canRead(project, actor, id, a.getActorId())) {
+            throw new ApiException(ApiError.ATTACHMENT_NOT_FOUND);
+        }
         return attempt(a);
     }
 
@@ -172,6 +179,27 @@ class FileTransactions implements Files {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public List<AttachmentView> retain(UUID project, UUID stage, List<UUID> ids) {
+        return retainFiles(project, stage, ids, stage == null ? "BANK" : "JOURNAL");
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<AttachmentView> retainProposal(UUID project, List<UUID> ids) {
+        return retainFiles(project, null, ids, PURPOSE_PROPOSAL);
+    }
+
+    /**
+     * Проверяет назначение вместе с проектом до удержания, чтобы файлы банка не попали в смету.
+     *
+     * @param project доступный проект под блокировкой
+     * @param stage этап либо null
+     * @param ids уникальные идентификаторы
+     * @param purpose ожидаемое назначение
+     * @return удержанные метаданные
+     */
+    private List<AttachmentView> retainFiles(
+            UUID project, UUID stage, List<UUID> ids, String purpose) {
         if (ids.size() > 10 || ids.stream().distinct().count() != ids.size())
             throw new ApiException("attachmentIds", "Выберите до 10 разных файлов");
         return ids.stream()
@@ -181,7 +209,8 @@ class FileTransactions implements Files {
                                     .lockById(id)
                                     .filter(x ->
                                             x.getProjectId().equals(project)
-                                                    && Objects.equals(x.getStageId(), stage))
+                                                    && Objects.equals(x.getStageId(), stage)
+                                                    && x.getPurpose().equals(purpose))
                                     .orElseThrow(
                                             () -> new ApiException(ApiError.ATTACHMENT_NOT_FOUND));
                     if (!a.getState().equals(STATE_READY))
@@ -250,22 +279,40 @@ class FileTransactions implements Files {
                 .ifPresent(a -> a.setState(STATE_DELETED));
     }
 
+    /**
+     * Проверяет назначение загрузки под блокировкой карточки до записи намерения и READY.
+     *
+     * @param actor автор текущей операции
+     * @param project карточка, права на которую проверяются заново
+     * @param stage обязателен только для журнала
+     * @param purpose JOURNAL, BANK либо PROPOSAL
+     * @throws ApiException при недопустимом состоянии или отсутствии полномочий
+     */
     private void authorize(UUID actor, UUID project, UUID stage, String purpose) {
         var access = projects.lockParticipant(project, actor);
-        if (purpose.equals("JOURNAL")) {
-            projects.requireOpen(project, actor);
-            if (!access.canPublishJournal()) throw new ApiException(ApiError.FORBIDDEN);
-            if (stage == null) throw new ApiException("stageId", "Укажите этап");
-            var s = stages.requireParticipant(project, stage, actor);
-            if (s.status() == StageStatus.PLANNED)
-                throw new ApiException(ApiError.JOURNAL_STAGE_STATE);
-        } else if (purpose.equals("BANK")) {
-            if (!access.owner() || !requests.mortgageSelected(project, actor))
-                throw new ApiException(ApiError.FORBIDDEN);
-            if (stage != null)
-                throw new ApiException(
-                        "stageId", "Для банковского дополнения этап задаётся в пакете");
-        } else throw new ApiException("purpose", "Выберите назначение файла");
+        switch (purpose) {
+            case "JOURNAL" -> {
+                projects.requireOpen(project, actor);
+                if (!access.canPublishJournal()) throw new ApiException(ApiError.FORBIDDEN);
+                if (stage == null) throw new ApiException("stageId", "Укажите этап");
+                var state = stages.requireParticipant(project, stage, actor);
+                if (state.status() == StageStatus.PLANNED)
+                    throw new ApiException(ApiError.JOURNAL_STAGE_STATE);
+            }
+            case "BANK" -> {
+                if (!access.owner() || !requests.mortgageSelected(project, actor))
+                    throw new ApiException(ApiError.FORBIDDEN);
+                if (stage != null)
+                    throw new ApiException(
+                            "stageId", "Для банковского дополнения этап задаётся в пакете");
+            }
+            case PURPOSE_PROPOSAL -> {
+                if (stage != null)
+                    throw new ApiException("stageId", "Изображение относится к смете, а не этапу");
+                proposalFiles.requireUpload(project, actor);
+            }
+            default -> throw new ApiException("purpose", "Выберите назначение файла");
+        }
     }
 
     private Attempt attempt(Attachment a) {

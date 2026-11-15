@@ -14,10 +14,11 @@ sealed interface DocumentView permits ProposalView, ContractView {}
 /**
  * Иллюстрация сметы без позиции хранения.
  *
- * @param url HTTPS-ссылка
+ * @param url защищённый адрес backend либо прежняя HTTPS-ссылка
+ * @param attachmentId закрытый файл либо null для внешней иллюстрации
  * @param caption подпись иллюстрации
  */
-record ProposalImageView(String url, String caption) {}
+record ProposalImageView(String url, String caption, UUID attachmentId) {}
 
 /**
  * Плановый этап сметы в составе ответа.

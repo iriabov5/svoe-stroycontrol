@@ -59,6 +59,7 @@ export function Profile({
         </a>
       )}
       <PageTitle
+        focusOnMount={!embedded}
         eyebrow="Личный кабинет"
         description="Ваше имя в обсуждениях и участники строительной команды."
       >

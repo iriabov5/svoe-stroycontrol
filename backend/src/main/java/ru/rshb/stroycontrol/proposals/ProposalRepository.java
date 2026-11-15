@@ -19,6 +19,15 @@ interface ProposalRepository extends JpaRepository<ConstructionProposal, UUID> {
     List<ConstructionProposal> findByProjectIdOrderByRevisionNoDesc(UUID projectId);
 
     /**
+     * Проверяет наличие редактируемой версии без раскрытия её содержимого.
+     *
+     * @param projectId карточка дома
+     * @param state проверяемое состояние
+     * @return существует ли версия в этом состоянии
+     */
+    boolean existsByProjectIdAndState(UUID projectId, String state);
+
+    /**
      * Ищет версию сметы только внутри указанной карточки.
      *
      * @param id идентификатор версии сметы

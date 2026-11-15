@@ -6,12 +6,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.Value;
 import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.common.SafeDiagnostics;
 
 import java.util.UUID;
 
@@ -19,6 +21,7 @@ import java.util.UUID;
  * Координирует метаданные и S3 короткими транзакциями; внешние вызовы не удерживают блокировки БД.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 class FileService {
     private final FileTransactions transactions;
@@ -36,6 +39,10 @@ class FileService {
      */
     AttachmentView upload(UploadScope scope, String name, String caption, byte[] bytes) {
         var type = FileInput.contentType(bytes);
+        field(
+                !"PROPOSAL".equals(scope.purpose()) || type.startsWith("image/"),
+                "file",
+                "Для сметы выберите JPEG, PNG или WebP");
         var hash = FileInput.sha256(bytes);
         String normalized = caption == null ? "" : caption.strip();
         field(normalized.length() <= 300, "caption", "Подпись — до 300 символов");
@@ -52,7 +59,11 @@ class FileService {
         try {
             if (!storage.matches(attempt.key(), hash))
                 storage.put(attempt.key(), type, hash, bytes);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException exception) {
+            log.error(
+                    "Не удалось загрузить файл в хранилище — загрузка={}",
+                    attempt.id(),
+                    SafeDiagnostics.exception(exception));
             transactions.failed(attempt.id());
             throw new ApiException(ApiError.STORAGE_UNAVAILABLE);
         }
@@ -72,7 +83,11 @@ class FileService {
         var file = transactions.read(actor, project, id);
         try {
             return new Download(file.view(), storage.get(file.key()));
-        } catch (RuntimeException _) {
+        } catch (RuntimeException exception) {
+            log.error(
+                    "Не удалось скачать файл из хранилища — файл={}",
+                    id,
+                    SafeDiagnostics.exception(exception));
             throw new ApiException(ApiError.STORAGE_UNAVAILABLE);
         }
     }
@@ -105,7 +120,11 @@ class FileService {
             try {
                 storage.delete(key);
                 transactions.deleted(id);
-            } catch (RuntimeException _) {
+            } catch (RuntimeException exception) {
+                log.error(
+                        "Не удалось удалить несвязанный файл — файл={}",
+                        id,
+                        SafeDiagnostics.exception(exception));
                 /* DELETING остаётся кандидатом следующего прохода. */
             }
         }

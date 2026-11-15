@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import ru.rshb.stroycontrol.projects.MortgageRequests;
 import ru.rshb.stroycontrol.projects.ProjectAccess;
 import ru.rshb.stroycontrol.projects.Projects;
+import ru.rshb.stroycontrol.proposals.ProposalFiles;
 import ru.rshb.stroycontrol.stages.StageStatus;
 import ru.rshb.stroycontrol.stages.StageView;
 import ru.rshb.stroycontrol.stages.Stages;
@@ -35,7 +36,8 @@ class FileTransactionsTest {
                         projects,
                         stages,
                         mock(MortgageRequests.class),
-                        Clock.fixed(now, ZoneOffset.UTC));
+                        Clock.fixed(now, ZoneOffset.UTC),
+                        mock(ProposalFiles.class));
         var project = UUID.randomUUID();
         var actor = UUID.randomUUID();
         var stage = UUID.randomUUID();
