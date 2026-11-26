@@ -128,6 +128,7 @@ class ProjectAuthorization {
                 project.getId(),
                 project.getName(),
                 project.getAddress(),
+                project.houseProfile(),
                 project.getCustomerId(),
                 project.getContractorId(),
                 project.getCreatedAt(),

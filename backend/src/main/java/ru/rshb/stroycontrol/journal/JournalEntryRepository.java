@@ -64,4 +64,19 @@ interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID> {
             where e.projectId = :project and e.stageId = :stage and e.status = 'PENDING'
             """)
     long countAwaiting(UUID project, UUID stage);
+
+    /**
+     * Проверяет фото у опубликованных записей этапа без чтения содержимого журнала.
+     *
+     * @param project идентификатор карточки дома
+     * @param stage идентификатор этапа
+     * @return true, если существует опубликованная запись с фотографией
+     */
+    @Query(
+            """
+            select count(p) > 0 from JournalPhoto p, JournalEntry e
+            where p.entryId = e.id and e.projectId = :project and e.stageId = :stage
+              and e.status = 'PUBLISHED'
+            """)
+    boolean hasPublishedPhoto(UUID project, UUID stage);
 }

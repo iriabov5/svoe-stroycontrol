@@ -343,6 +343,28 @@ paths:
           $ref: "#/components/responses/UnsupportedMediaType"
       description: Прямое изменение плана доступно только проектам LEGACY. Для новых проектов план
         составляет подрядчик внутри предложения.
+  /projects/{projectId}/control-gates:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Stages
+      operationId: listControlGates
+      summary: Получить контрольные точки строительства
+      description: Возвращает подсказки перед необратимыми работами. Карточки не являются техническим заключением и не меняют состояние проекта.
+      responses:
+        "200":
+          description: Контрольные точки доступной карточки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ControlGate"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
   /projects/{projectId}/stages/order:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
@@ -3789,6 +3811,44 @@ components:
       properties:
         email:
           $ref: "#/components/schemas/InputEmail"
+    HouseProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - areaSqm
+        - floors
+        - wallMaterial
+        - foundationType
+        - roofType
+        - plannedCompletion
+      description: Общие параметры дома без персональных и банковских сведений.
+      properties:
+        areaSqm:
+          type: integer
+          minimum: 20
+          maximum: 2000
+          description: Ориентировочная площадь дома в квадратных метрах.
+        floors:
+          type: integer
+          minimum: 1
+          maximum: 5
+        wallMaterial:
+          type: string
+          minLength: 1
+          maxLength: 120
+        foundationType:
+          type: string
+          minLength: 1
+          maxLength: 120
+        roofType:
+          type: string
+          minLength: 1
+          maxLength: 120
+        plannedCompletion:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: Понятный участникам ориентир срока, например «октябрь 2027».
     Project:
       type: object
       required:
@@ -3808,6 +3868,11 @@ components:
         address:
           type: string
           maxLength: 300
+        houseProfile:
+          anyOf:
+            - $ref: "#/components/schemas/HouseProfile"
+            - type: "null"
+          description: Общие параметры дома или null, если они ещё не заполнены.
         customerId:
           type: string
           format: uuid
@@ -4049,6 +4114,36 @@ components:
           items:
             $ref: "#/components/schemas/StageVersion"
           description: Все этапы карточки без пропусков и повторов, в новом порядке.
+    ControlGate:
+      type: object
+      required:
+        - key
+        - status
+        - responsibleRole
+        - title
+        - action
+        - detail
+        - stageId
+      properties:
+        key:
+          type: string
+          enum: [FOUNDATION, UTILITIES, HANDOVER]
+        status:
+          type: string
+          enum: [BLOCKED, WAITING_CUSTOMER, WAITING_CONTRACTOR, COMPLETED]
+        responsibleRole:
+          type: string
+          enum: [CUSTOMER, CONTRACTOR]
+        title:
+          type: string
+        action:
+          type: string
+        detail:
+          type: string
+        stageId:
+          type: [string, "null"]
+          format: uuid
+          description: Связанный этап либо null, если план ещё не содержит нужную работу.
     Stage:
       type: object
       required:

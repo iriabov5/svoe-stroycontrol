@@ -18,6 +18,7 @@ vi.mock("./api/client", async (importOriginal) => {
       create: vi.fn(),
       assign: vi.fn(),
       listStages: vi.fn(),
+      listControlGates: vi.fn(),
     },
   };
 });
@@ -25,7 +26,10 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
 });
-beforeEach(() => vi.mocked(api.listStages).mockResolvedValue([]));
+beforeEach(() => {
+  vi.mocked(api.listStages).mockResolvedValue([]);
+  vi.mocked(api.listControlGates).mockResolvedValue([]);
+});
 const owner = {
   id: "owner",
   email: "owner@example.test",

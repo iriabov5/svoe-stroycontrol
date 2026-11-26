@@ -8,6 +8,8 @@ import { Notice } from "./components";
 import { CreateProject, ProjectDetail, ProjectList } from "./Projects";
 import { StageDetail } from "./Stages";
 
+type ActionProject = { id: string; name: string };
+
 export function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,6 +21,7 @@ export function App() {
   const [attempt, setAttempt] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
   const [profileRequired, setProfileRequired] = useState(false);
+  const [actionProjects, setActionProjects] = useState<ActionProject[]>([]);
   const profileFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!profileRequired) return;
@@ -69,6 +72,37 @@ export function App() {
       current = false;
     };
   }, [attempt]);
+  useEffect(() => {
+    if (!account) {
+      setActionProjects([]);
+      return;
+    }
+    let current = true;
+    api
+      .list()
+      .then(async (projects) => {
+        const actions = await Promise.all(
+          projects.map(async (project) => {
+            const gates = await api.listControlGates(project.id);
+            return gates.some(
+              (gate) =>
+                gate.responsibleRole === account.role &&
+                gate.status.startsWith("WAITING"),
+            )
+              ? { id: project.id, name: project.name }
+              : null;
+          }),
+        );
+        if (current)
+          setActionProjects(actions.filter(Boolean) as ActionProject[]);
+      })
+      .catch(() => {
+        if (current) setActionProjects([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [account]);
   useEffect(() => {
     const navigate = () =>
       setRoute(window.location.hash.slice(1) || "/projects");
@@ -206,6 +240,17 @@ export function App() {
           </div>
           {account ? (
             <div className="account-bar">
+              {actionProjects.length > 0 && (
+                <a
+                  className="header-action-alert"
+                  href={`#/projects/${actionProjects[0].id}`}
+                  aria-label={`Требуется действие: ${actionProjects.length}. Открыть ${actionProjects[0].name}`}
+                >
+                  <span aria-hidden="true">!</span>
+                  {actionProjects.length}{" "}
+                  {actionProjects.length === 1 ? "действие" : "действия"}
+                </a>
+              )}
               <div>
                 <a
                   className="account-email profile-link"
@@ -222,9 +267,6 @@ export function App() {
                       : "Подрядчик")}{" "}
                   · профиль
                 </a>
-                <span className="account-role">
-                  {account.role === "CUSTOMER" ? "Заказчик" : "Подрядчик"}
-                </span>
               </div>
               <button
                 type="button"

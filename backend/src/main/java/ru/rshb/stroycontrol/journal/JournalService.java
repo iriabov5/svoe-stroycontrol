@@ -67,6 +67,13 @@ class JournalService implements Journal {
     /** {@inheritDoc} */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public boolean hasPublishedPhoto(UUID projectId, UUID stageId) {
+        return entries.hasPublishedPhoto(projectId, stageId);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public List<Journal.Evidence> evidence(UUID projectId, UUID stageId, List<UUID> entryIds) {
         if (entryIds.isEmpty()
                 || entryIds.size() > 20

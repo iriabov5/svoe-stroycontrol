@@ -177,6 +177,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/control-gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Получить контрольные точки строительства
+         * @description Возвращает подсказки перед необратимыми работами. Карточки не являются техническим заключением и не меняют состояние проекта.
+         */
+        get: operations["listControlGates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/stages/order": {
         parameters: {
             query?: never;
@@ -1189,11 +1211,24 @@ export interface components {
         AssignContractorRequest: {
             email: components["schemas"]["InputEmail"];
         };
+        /** @description Общие параметры дома без персональных и банковских сведений. */
+        HouseProfile: {
+            /** @description Ориентировочная площадь дома в квадратных метрах. */
+            areaSqm: number;
+            floors: number;
+            wallMaterial: string;
+            foundationType: string;
+            roofType: string;
+            /** @description Понятный участникам ориентир срока, например «октябрь 2027». */
+            plannedCompletion: string;
+        };
         Project: {
             /** Format: uuid */
             id: string;
             name: string;
             address: string;
+            /** @description Общие параметры дома или null, если они ещё не заполнены. */
+            houseProfile?: components["schemas"]["HouseProfile"] | null;
             /** Format: uuid */
             customerId: string;
             /**
@@ -1282,6 +1317,22 @@ export interface components {
         ReorderStagesRequest: {
             /** @description Все этапы карточки без пропусков и повторов, в новом порядке. */
             stages: components["schemas"]["StageVersion"][];
+        };
+        ControlGate: {
+            /** @enum {string} */
+            key: "FOUNDATION" | "UTILITIES" | "HANDOVER";
+            /** @enum {string} */
+            status: "BLOCKED" | "WAITING_CUSTOMER" | "WAITING_CONTRACTOR" | "COMPLETED";
+            /** @enum {string} */
+            responsibleRole: "CUSTOMER" | "CONTRACTOR";
+            title: string;
+            action: string;
+            detail: string;
+            /**
+             * Format: uuid
+             * @description Связанный этап либо null, если план ещё не содержит нужную работу.
+             */
+            stageId: string | null;
         };
         Stage: {
             /** Format: uuid */
@@ -2392,6 +2443,30 @@ export interface operations {
                 };
             };
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listControlGates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контрольные точки доступной карточки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlGate"][];
+                };
+            };
+            401: components["responses"]["AuthRequired"];
+            404: components["responses"]["ProjectNotFound"];
         };
     };
     reorderStages: {

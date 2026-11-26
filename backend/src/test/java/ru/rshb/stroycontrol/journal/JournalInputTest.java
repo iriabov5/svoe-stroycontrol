@@ -66,6 +66,22 @@ class JournalInputTest {
     }
 
     @Test
+    @DisplayName("Принимает только известную локальную иллюстрацию демо-сценария")
+    void acceptsKnownDemoPhoto() {
+        var body = input("NOTE");
+        body.put(
+                "photos",
+                List.of(
+                        Map.of(
+                                "url",
+                                "/demo/foundation-reinforcement-example.png",
+                                "caption",
+                                "Демонстрационный пример")));
+
+        assertThat(JournalInput.parse(body).photos()).hasSize(1);
+    }
+
+    @Test
     @DisplayName("Вопрос требует текста ответа, согласование не принимает неизвестное решение")
     void answer() {
         var body = new HashMap<String, Object>();

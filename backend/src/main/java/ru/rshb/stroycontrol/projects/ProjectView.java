@@ -12,6 +12,7 @@ import java.util.UUID;
  * @param id идентификатор карточки
  * @param name название дома
  * @param address адрес объекта свободным текстом
+ * @param houseProfile общие параметры дома либо null, если они ещё не заполнены
  * @param customerId идентификатор заказчика, владеющего карточкой
  * @param contractorId идентификатор подрядчика или {@code null} до назначения
  * @param processMode прежний процесс либо подготовка через предложение
@@ -31,6 +32,7 @@ public record ProjectView(
         UUID id,
         String name,
         String address,
+        HouseProfile houseProfile,
         UUID customerId,
         UUID contractorId,
         Instant createdAt,
@@ -82,6 +84,7 @@ public record ProjectView(
             UUID id,
             String name,
             String address,
+            HouseProfile houseProfile,
             UUID customerId,
             UUID contractorId,
             Instant createdAt,
@@ -94,6 +97,56 @@ public record ProjectView(
                 id,
                 name,
                 address,
+                houseProfile,
+                customerId,
+                contractorId,
+                createdAt,
+                processMode,
+                requestSubmitted,
+                approvedProposalId,
+                approvedContractId,
+                preparationClosed,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    /**
+     * Создаёт прежнюю модель без паспорта и представлений; адаптер доступа дополняет её для
+     * участника.
+     *
+     * @param id карточка
+     * @param name название
+     * @param address адрес
+     * @param customerId владелец
+     * @param contractorId основной контакт
+     * @param createdAt время создания
+     * @param processMode процесс подготовки
+     * @param requestSubmitted заявка отправлена
+     * @param approvedProposalId согласованная смета
+     * @param approvedContractId согласованный договор
+     * @param preparationClosed подготовка закрыта
+     */
+    public ProjectView(
+            UUID id,
+            String name,
+            String address,
+            UUID customerId,
+            UUID contractorId,
+            Instant createdAt,
+            String processMode,
+            boolean requestSubmitted,
+            UUID approvedProposalId,
+            UUID approvedContractId,
+            boolean preparationClosed) {
+        this(
+                id,
+                name,
+                address,
+                null,
                 customerId,
                 contractorId,
                 createdAt,

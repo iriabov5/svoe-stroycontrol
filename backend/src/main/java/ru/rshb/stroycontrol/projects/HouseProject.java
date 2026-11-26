@@ -49,6 +49,24 @@ class HouseProject {
     @NonNull
     private String address;
 
+    @Column(name = "area_sqm")
+    private Integer areaSqm;
+
+    @Column
+    private Integer floors;
+
+    @Column(name = "wall_material", length = 120)
+    private String wallMaterial;
+
+    @Column(name = "foundation_type", length = 120)
+    private String foundationType;
+
+    @Column(name = "roof_type", length = 120)
+    private String roofType;
+
+    @Column(name = "planned_completion", length = 60)
+    private String plannedCompletion;
+
     @Column(name = "customer_id", nullable = false)
     @NonNull
     private UUID customerId;
@@ -182,6 +200,25 @@ class HouseProject {
     }
 
     /**
+     * Возвращает заполненный паспорт дома либо {@code null} для обычной или исторической карточки.
+     *
+     * <p>Паспорт публикуется только целиком: частично записанные значения не должны создавать для
+     * участника ложное ощущение завершённости данных.
+     *
+     * @return общие характеристики объекта либо null
+     */
+    HouseProfile houseProfile() {
+        if (areaSqm == null
+                || floors == null
+                || wallMaterial == null
+                || foundationType == null
+                || roofType == null
+                || plannedCompletion == null) return null;
+        return new HouseProfile(
+                areaSqm, floors, wallMaterial, foundationType, roofType, plannedCompletion);
+    }
+
+    /**
      * Возвращает общую модель карточки без банковских сведений и закрытых связей копирования.
      *
      * @return общие поля карточки и состояния подготовки
@@ -191,6 +228,7 @@ class HouseProject {
                 id,
                 name,
                 address,
+                houseProfile(),
                 customerId,
                 contractorId,
                 createdAt,

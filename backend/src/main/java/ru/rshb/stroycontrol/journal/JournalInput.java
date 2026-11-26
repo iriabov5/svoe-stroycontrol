@@ -2,7 +2,6 @@ package ru.rshb.stroycontrol.journal;
 
 import static ru.rshb.stroycontrol.common.PreparationInput.field;
 import static ru.rshb.stroycontrol.common.PreparationInput.fieldValue;
-import static ru.rshb.stroycontrol.common.PreparationInput.image;
 import static ru.rshb.stroycontrol.common.PreparationInput.keys;
 import static ru.rshb.stroycontrol.common.PreparationInput.require;
 import static ru.rshb.stroycontrol.common.PreparationInput.uuid;
@@ -83,7 +82,7 @@ record JournalInput(
             field(raw.get(i) instanceof Map<?, ?>, FIELD_PHOTOS, "Проверьте фотографии");
             var row = (Map<?, ?>) raw.get(i);
             require(Set.of("url", FIELD_CAPTION).containsAll(row.keySet()));
-            String url = fieldValue(prefix + "url", () -> image(row.get("url")));
+            String url = fieldValue(prefix + "url", () -> photoUrl(row.get("url")));
             String caption =
                     fieldValue(
                             prefix + FIELD_CAPTION,
@@ -125,6 +124,25 @@ record JournalInput(
                 FIELD_ATTACHMENT_IDS,
                 "Файлы не должны повторяться");
         return ids;
+    }
+
+    /**
+     * Проверяет адрес фото журнала, включая строго ограниченные локальные иллюстрации
+     * демо-сценария.
+     *
+     * <p>Обычные внешние адреса остаются только HTTPS. Путь {@code /demo/} не является внешним
+     * ресурсом и разрешён лишь для двух поставляемых синтетических изображений, поэтому не
+     * расширяет возможность загрузить произвольный небезопасный контент.
+     *
+     * @param value значение поля {@code photos[].url}
+     * @return проверенный адрес
+     */
+    private static String photoUrl(Object value) {
+        String url = PreparationInput.text(value, 2048);
+        if (url == null) throw new ApiException(ApiError.VALIDATION_ERROR);
+        if (Set.of("/demo/foundation-reinforcement-example.png", "/demo/utilities-example.png")
+                .contains(url)) return url;
+        return PreparationInput.image(url);
     }
 
     /**

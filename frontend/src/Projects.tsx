@@ -1,4 +1,5 @@
 import { CompletionPanel } from "./Completion";
+import { ControlGates } from "./ControlGates";
 import { useEffect, useState, type SubmitEvent } from "react";
 
 import {
@@ -291,7 +292,7 @@ export function ProjectDetail({
           </Notice>
         )}
         <div className="detail-grid participant-overview">
-          <section className="panel">
+          <section className="panel object-overview">
             <p className="eyebrow">Дом и заказчик</p>
             <h2>Об объекте</h2>
             <ActorLabel snapshot={project.ownerPresentation} role="CUSTOMER" />
@@ -309,6 +310,39 @@ export function ProjectDetail({
               Данные видны заказчику и назначенной команде подрядчика.
             </p>
           </section>
+          {project.houseProfile && (
+            <section className="panel house-profile" aria-label="Паспорт дома">
+              <p className="eyebrow">Паспорт дома</p>
+              <h2>Параметры объекта</h2>
+              <dl>
+                <div>
+                  <dt>Площадь</dt>
+                  <dd>{project.houseProfile.areaSqm} м²</dd>
+                </div>
+                <div>
+                  <dt>Этажность</dt>
+                  <dd>{project.houseProfile.floors}</dd>
+                </div>
+                <div>
+                  <dt>Стены</dt>
+                  <dd>{project.houseProfile.wallMaterial}</dd>
+                </div>
+                <div>
+                  <dt>Фундамент</dt>
+                  <dd>{project.houseProfile.foundationType}</dd>
+                </div>
+                <div>
+                  <dt>Кровля</dt>
+                  <dd>{project.houseProfile.roofType}</dd>
+                </div>
+                <div>
+                  <dt>Плановый срок</dt>
+                  <dd>{project.houseProfile.plannedCompletion}</dd>
+                </div>
+              </dl>
+              <p className="hint">Демонстрационные параметры объекта.</p>
+            </section>
+          )}
           {project.contractorId ? (
             <ContractorCard
               project={project}
@@ -336,6 +370,7 @@ export function ProjectDetail({
         {(project.processMode !== "PROPOSAL_REQUIRED" ||
           project.approvedProposalId) && (
           <>
+            <ControlGates projectId={project.id} account={account} />
             <StageList
               key={project.approvedProposalId ?? "legacy"}
               project={project}

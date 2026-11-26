@@ -6,6 +6,7 @@ import {
   ApiError,
   errorMessage,
   type Account,
+  type ControlGate,
   type Project,
   type Stage,
   type StagePlan,
@@ -228,6 +229,7 @@ export function StageList({
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [gates, setGates] = useState<ControlGate[]>([]);
   const owner =
     account.id === project.customerId &&
     !project.completedAt &&
@@ -246,6 +248,20 @@ export function StageList({
       })
       .catch((error_) => {
         if (current) setError(errorMessage(error_));
+      });
+    return () => {
+      current = false;
+    };
+  }, [project.id, attempt]);
+  useEffect(() => {
+    let current = true;
+    api
+      .listControlGates(project.id)
+      .then((data) => {
+        if (current) setGates(data);
+      })
+      .catch(() => {
+        if (current) setGates([]);
       });
     return () => {
       current = false;
@@ -293,54 +309,74 @@ export function StageList({
     }
     return (
       <ol className="stage-list">
-        {stages.map((stage, index) => (
-          <li className="panel stage-row" key={stage.id}>
-            <span className="stage-number" aria-hidden="true">
-              {stage.position.toString().padStart(2, "0")}
-            </span>
-            <div className="stage-content">
-              <span className={`badge stage-status-${stage.status}`}>
-                {statuses[stage.status]}
+        {stages.map((stage, index) => {
+          const action = gates.find(
+            (gate) =>
+              gate.stageId === stage.id &&
+              gate.responsibleRole === account.role &&
+              gate.status.startsWith("WAITING"),
+          );
+          return (
+            <li
+              className={`panel stage-row ${action ? "stage-row-action" : ""}`}
+              key={stage.id}
+            >
+              <span className="stage-number" aria-hidden="true">
+                {stage.position.toString().padStart(2, "0")}
               </span>
-              <h3>
-                <a href={`#/projects/${project.id}/stages/${stage.id}`}>
-                  {stage.name}
-                </a>
-              </h3>
-              <p>
-                {workTypes[stage.workType]} · План:{" "}
-                {stageDate(stage.plannedStart)} —{" "}
-                {stageDate(stage.plannedFinish)}
-              </p>
-              <StageTiming stage={stage} />
-            </div>
-            {owner && (
-              <div
-                className="stage-order"
-                aria-label={`Порядок этапа ${stage.name}`}
-              >
-                <button
-                  type="button"
-                  className="button secondary"
-                  aria-label={`Поднять этап ${stage.name}`}
-                  disabled={busy || index === 0}
-                  onClick={() => move(index, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  aria-label={`Опустить этап ${stage.name}`}
-                  disabled={busy || index === stages.length - 1}
-                  onClick={() => move(index, 1)}
-                >
-                  ↓
-                </button>
+              <div className="stage-content">
+                <span className={`badge stage-status-${stage.status}`}>
+                  {statuses[stage.status]}
+                </span>
+                <h3>
+                  <a href={`#/projects/${project.id}/stages/${stage.id}`}>
+                    {stage.name}
+                  </a>
+                </h3>
+                <p>
+                  {workTypes[stage.workType]} · План:{" "}
+                  {stageDate(stage.plannedStart)} —{" "}
+                  {stageDate(stage.plannedFinish)}
+                </p>
+                <StageTiming stage={stage} />
+                {action && (
+                  <a
+                    className="stage-required-action"
+                    href={`#/projects/${project.id}/stages/${stage.id}`}
+                  >
+                    <span aria-hidden="true">!</span>
+                    Требуется действие: {action.action}
+                  </a>
+                )}
               </div>
-            )}
-          </li>
-        ))}
+              {owner && (
+                <div
+                  className="stage-order"
+                  aria-label={`Порядок этапа ${stage.name}`}
+                >
+                  <button
+                    type="button"
+                    className="button secondary"
+                    aria-label={`Поднять этап ${stage.name}`}
+                    disabled={busy || index === 0}
+                    onClick={() => move(index, -1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    aria-label={`Опустить этап ${stage.name}`}
+                    disabled={busy || index === stages.length - 1}
+                    onClick={() => move(index, 1)}
+                  >
+                    ↓
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
     );
   }

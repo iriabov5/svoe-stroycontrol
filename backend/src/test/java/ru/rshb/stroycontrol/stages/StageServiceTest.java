@@ -10,11 +10,13 @@ import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import ru.rshb.stroycontrol.accounts.AccountRole;
 import ru.rshb.stroycontrol.accounts.AccountView;
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.journal.Journal;
 import ru.rshb.stroycontrol.projects.ProjectAccess;
 import ru.rshb.stroycontrol.projects.Projects;
 
@@ -29,9 +31,11 @@ import java.util.UUID;
 class StageServiceTest {
     final StageRepository repository = mock(StageRepository.class);
     final Projects projects = mock(Projects.class);
+    final Journal journal = mock(Journal.class);
+    final ObjectProvider<Journal> journals = mock(ObjectProvider.class);
     final Clock clock =
             Clock.fixed(Instant.parse("2026-11-12T22:30:00Z"), ZoneId.of("Europe/Moscow"));
-    final StageService service = new StageService(repository, projects, clock);
+    final StageService service = new StageService(repository, projects, journals, clock);
     final AccountView actor =
             new AccountView(UUID.randomUUID(), "actor@example.test", AccountRole.CUSTOMER);
     final UUID projectId = UUID.randomUUID();

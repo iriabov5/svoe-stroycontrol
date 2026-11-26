@@ -6,7 +6,12 @@ import { api, ApiError } from "./api/client";
 
 vi.mock("./api/client", async (original) => ({
   ...(await original<typeof import("./api/client")>()),
-  api: { me: vi.fn(), logout: vi.fn() },
+  api: {
+    me: vi.fn(),
+    logout: vi.fn(),
+    list: vi.fn(),
+    listControlGates: vi.fn(),
+  },
 }));
 vi.mock("./Projects", () => ({
   ProjectList: () => <h1>Список домов</h1>,
@@ -36,6 +41,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/#/projects");
   vi.mocked(api.me).mockResolvedValue(owner);
   vi.mocked(api.logout).mockResolvedValue(undefined);
+  vi.mocked(api.list).mockResolvedValue([]);
 });
 afterEach(() => {
   cleanup();
@@ -64,6 +70,36 @@ it("подрядчик не получает форму создания дом�
     await screen.findByRole("heading", { name: "Список домов" }),
   ).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "Новый дом" })).toBeNull();
+});
+it("показывает в шапке доступную ссылку на объект с действием", async () => {
+  vi.mocked(api.list).mockResolvedValue([
+    {
+      id: "house",
+      name: "Дом семьи Орловых",
+      address: "Берёзки",
+      customerId: owner.id,
+      contractorId: "builder",
+      createdAt: "2027-04-10T00:00:00Z",
+    },
+  ]);
+  vi.mocked(api.listControlGates).mockResolvedValue([
+    {
+      key: "FOUNDATION",
+      status: "WAITING_CUSTOMER",
+      responsibleRole: "CUSTOMER",
+      title: "Перед заливкой фундамента",
+      action: "Проверить завершённый этап",
+      detail: "Проверьте фото.",
+      stageId: "foundation",
+    },
+  ]);
+
+  render(<App />);
+
+  const alert = await screen.findByRole("link", {
+    name: "Требуется действие: 1. Открыть Дом семьи Орловых",
+  });
+  expect(alert.getAttribute("href")).toBe("#/projects/house");
 });
 it("неавторизованному аккаунту показывает вход, сохраняя ссылку на этап", async () => {
   vi.mocked(api.me).mockRejectedValue(

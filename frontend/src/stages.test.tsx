@@ -8,6 +8,7 @@ vi.mock("./api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api/client")>()),
   api: {
     listStages: vi.fn(),
+    listControlGates: vi.fn(),
     getStage: vi.fn(),
     get: vi.fn(),
     createStage: vi.fn(),
@@ -106,6 +107,7 @@ it("конфликт сохраняет введённый план и пред�
 it("перестановка передаёт полный список этапов с версиями", async () => {
   const second = { ...stage, id: "second", name: "Стены", position: 2 };
   vi.mocked(api.listStages).mockResolvedValue([stage, second]);
+  vi.mocked(api.listControlGates).mockResolvedValue([]);
   vi.mocked(api.reorderStages).mockResolvedValue([
     { ...second, position: 1 },
     { ...stage, position: 2 },
@@ -120,6 +122,29 @@ it("перестановка передаёт полный список этап
     { id: "stage", version: 2 },
   ]);
   await screen.findByText("Порядок этапов сохранён");
+});
+
+it("выделяет этап, когда текущей роли нужно действие", async () => {
+  vi.mocked(api.listStages).mockResolvedValue([stage]);
+  vi.mocked(api.listControlGates).mockResolvedValue([
+    {
+      key: "FOUNDATION",
+      status: "WAITING_CUSTOMER",
+      responsibleRole: "CUSTOMER",
+      title: "Перед заливкой фундамента",
+      action: "Проверить завершённый этап",
+      detail: "Проверьте фото.",
+      stageId: stage.id,
+    },
+  ]);
+
+  render(<StageList project={project} account={owner} />);
+
+  expect(
+    await screen.findByRole("link", {
+      name: "Требуется действие: Проверить завершённый этап",
+    }),
+  ).toBeTruthy();
 });
 
 it("подрядчик видит только доступный переход и результат начала работ", async () => {

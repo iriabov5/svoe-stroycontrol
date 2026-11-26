@@ -2,6 +2,7 @@ package ru.rshb.stroycontrol.stages;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.rshb.stroycontrol.accounts.AccountView;
 import ru.rshb.stroycontrol.common.ApiError;
 import ru.rshb.stroycontrol.common.ApiException;
+import ru.rshb.stroycontrol.journal.Journal;
 import ru.rshb.stroycontrol.projects.ProjectAccess;
 import ru.rshb.stroycontrol.projects.Projects;
 
@@ -33,6 +35,8 @@ import java.util.stream.Collectors;
 class StageService implements Stages {
     private final StageRepository repository;
     private final Projects projects;
+
+    private final ObjectProvider<Journal> journal;
     private final Clock clock;
 
     /** {@inheritDoc} */
@@ -65,6 +69,25 @@ class StageService implements Stages {
     List<StageView> list(AccountView actor, UUID projectId) {
         projects.requireParticipant(projectId, actor.id());
         return views(repository.findByProjectIdOrderByPositionAsc(projectId));
+    }
+
+    /**
+     * Возвращает подсказки перед необратимыми работами доступной карточки.
+     *
+     * <p>Расчёт использует только сохранённый план и не подтверждает качество работ, не меняет
+     * этапы и не раскрывает сведения, недоступные участнику.
+     *
+     * @param actor аутентифицированный участник карточки
+     * @param projectId идентификатор карточки дома
+     * @return контрольные точки в постоянном порядке
+     * @throws ApiException с PROJECT_NOT_FOUND для отсутствующей или чужой карточки
+     */
+    @Transactional(readOnly = true)
+    List<ControlGateView> controlGates(AccountView actor, UUID projectId) {
+        projects.requireParticipant(projectId, actor.id());
+        return ControlGates.from(
+                views(repository.findByProjectIdOrderByPositionAsc(projectId)),
+                stageId -> journal.getObject().hasPublishedPhoto(projectId, stageId));
     }
 
     /**

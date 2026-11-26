@@ -4,6 +4,15 @@ export type Project = components["schemas"]["Project"];
 export type Role = components["schemas"]["Role"];
 export type Stage = components["schemas"]["Stage"];
 export type StagePlan = components["schemas"]["CreateStageRequest"];
+export type ControlGate = {
+  key: "FOUNDATION" | "UTILITIES" | "HANDOVER";
+  status: "BLOCKED" | "WAITING_CUSTOMER" | "WAITING_CONTRACTOR" | "COMPLETED";
+  responsibleRole: "CUSTOMER" | "CONTRACTOR";
+  title: string;
+  action: string;
+  detail: string;
+  stageId: string | null;
+};
 type Problem = components["schemas"]["Problem"];
 
 export class ApiError extends Error {
@@ -88,6 +97,10 @@ export const api = {
     ),
   listStages: (projectId: string) =>
     request<Stage[]>(`/projects/${encodeURIComponent(projectId)}/stages`),
+  listControlGates: (projectId: string) =>
+    request<ControlGate[]>(
+      `/projects/${encodeURIComponent(projectId)}/control-gates`,
+    ),
   getStage: (projectId: string, stageId: string) =>
     request<Stage>(
       `/projects/${encodeURIComponent(projectId)}/stages/${encodeURIComponent(stageId)}`,
