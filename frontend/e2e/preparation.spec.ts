@@ -564,6 +564,9 @@ test("Заявка, демо-ипотека, смета и договор отк
   await page
     .getByRole("button", { name: "Отправить на приёмку", exact: true })
     .click();
+  await expect(
+    acceptance.getByText("На приёмке", { exact: true }).first(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Выйти", exact: true }).click();
   await login(page, owner);
   await page.goto(stageUrl);

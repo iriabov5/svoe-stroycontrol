@@ -3,11 +3,13 @@ package ru.rshb.stroycontrol;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import org.awaitility.Awaitility;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,6 +40,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -89,6 +92,7 @@ class ApiIntegrationTest {
     @AfterEach
     void resetStageBankScenario() {
         stageBank.scenario("ACCEPTED");
+        bank.plotScenario("NORMAL");
     }
 
     @LocalServerPort
@@ -3322,5 +3326,525 @@ join construction_contracts c on c.project_id=p.id join construction_proposals d
                                 .path("displayName")
                                 .asText())
                 .isEqualTo("Алексей Орлов");
+    }
+
+    /** Сохраняет номер без изменения остальных пожеланий. */
+    JsonNode financingNumber(Browser owner, String id, String number) throws Exception {
+        var path = "/projects/" + id + "/request";
+        long version = json(owner.request("GET", path, null, false)).path("version").asLong();
+        var response =
+                owner.request(
+                        "PATCH", path, Map.of("version", version, "cadastralNumber", number), true);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        return json(response);
+    }
+
+    /** Создаёт реквизиты команды в конкретной версии заявки и плана. */
+    Map<String, Object> financingCommand(long requestVersion, long planVersion) {
+        return new HashMap<>(
+                Map.of(
+                        "requestVersion",
+                        requestVersion,
+                        "planningVersion",
+                        planVersion,
+                        "idempotencyKey",
+                        UUID.randomUUID()));
+    }
+
+    /** Выполняет проверку текущего номера и возвращает типизированный HTTP-снимок. */
+    JsonNode financingCheck(Browser owner, String id) throws Exception {
+        long version =
+                json(owner.request("GET", "/projects/" + id + "/request", null, false))
+                        .path("version")
+                        .asLong();
+        var path = "/projects/" + id + "/financing-planning";
+        long plan = json(owner.request("GET", path, null, false)).path("version").asLong();
+        var response =
+                owner.request("POST", path + "/plot-checks", financingCommand(version, plan), true);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        return json(response);
+    }
+
+    /** Создаёт параметры расчёта без доверия к клиентским ставке и платежу. */
+    Map<String, Object> financingCalculation(JsonNode plan, long version) {
+        var body = financingCommand(version, plan.path("version").asLong());
+        body.put("plotCheckId", plan.path("plotCheck").path("id").asText());
+        body.put("cost", 5000000);
+        body.put("depositPercent", 20);
+        body.put("years", 20);
+        body.put("joint", false);
+        return body;
+    }
+
+    @Test
+    @DisplayName("Проверка и расчёт сохраняются после входа и не меняют заявку или одобрение")
+    void financingLifecycle() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var root = "/projects/" + id;
+        preparationRequest(owner, id, "RSHB_RURAL_MORTGAGE");
+        var imported =
+                owner.request(
+                        "POST",
+                        root + "/mortgage-approval/import",
+                        Map.of(
+                                "version",
+                                1,
+                                "demoConsent",
+                                true,
+                                "idempotencyKey",
+                                UUID.randomUUID()),
+                        true);
+        assertThat(imported.statusCode()).isEqualTo(200);
+        String approval = owner.request("GET", root + "/mortgage-approval", null, false).body();
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var before = owner.request("GET", root + "/request", null, false).body();
+        var checked = financingCheck(owner, id);
+        assertThat(checked.path("plotCheckCurrent").asBoolean()).isTrue();
+        var body = financingCalculation(checked, req.path("version").asLong());
+        var calculated =
+                owner.request("POST", root + "/financing-planning/calculations", body, true);
+        assertThat(calculated.statusCode()).as(calculated.body()).isEqualTo(200);
+        var result = json(calculated);
+        assertThat(result.path("calculationCurrent").asBoolean()).isTrue();
+        assertThat(result.path("calculation").path("monthlyPayment").asDouble())
+                .isEqualTo(22183.90);
+        assertThat(result.path("calculation").path("principal").asInt()).isEqualTo(4000000);
+        assertThat(owner.request("GET", root + "/request", null, false).body()).isEqualTo(before);
+        assertThat(owner.request("GET", root + "/mortgage-approval", null, false).body())
+                .isEqualTo(approval);
+        assertThat(
+                        json(
+                                owner.request(
+                                        "POST",
+                                        root + "/financing-planning/calculations",
+                                        body,
+                                        true)))
+                .isEqualTo(result);
+        owner.request("POST", "/auth/logout", null, true);
+        owner.csrf();
+        owner.login();
+        assertThat(json(owner.request("GET", root + "/financing-planning", null, false)))
+                .isEqualTo(result);
+        financingNumber(owner, id, "31:15:1203001:88");
+        assertThat(
+                        json(owner.request("GET", root + "/financing-planning", null, false))
+                                .path("calculationCurrent")
+                                .asBoolean())
+                .isFalse();
+        var second = financingCheck(owner, id);
+        assertThat(second.path("plotCheck").path("rate").asDouble()).isEqualTo(0.1);
+        assertThat(second.path("calculationCurrent").asBoolean()).isFalse();
+    }
+
+    @ParameterizedTest(name = "Участок {0} → {1}")
+    @CsvSource({"50:21:0040112:105,INELIGIBLE", "16:24:070801:999,NOT_FOUND"})
+    @DisplayName("Отрицательная проверка и отсутствие в демобазе не дают кредитный расчёт")
+    void financingNegativeResults(String number, String expected) throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var req = financingNumber(owner, id, number);
+        var checked = financingCheck(owner, id);
+        assertThat(checked.path("plotCheck").path("status").asText()).isEqualTo(expected);
+        assertThat(checked.path("plotCheck").path("rate").isNull()).isTrue();
+        error(
+                owner.request(
+                        "POST",
+                        "/projects/" + id + "/financing-planning/calculations",
+                        financingCalculation(checked, req.path("version").asLong()),
+                        true),
+                409,
+                "STALE_FINANCING_PLAN");
+    }
+
+    @Test
+    @DisplayName("Планирование скрыто от подрядчика, команды и постороннего, CSRF обязателен")
+    void financingIsolation() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var builder = new Browser().account("CONTRACTOR");
+        var other = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var path = "/projects/" + id + "/financing-planning";
+        owner.assign(id, builder.email);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var body = financingCommand(req.path("version").asLong(), 0);
+        for (var browser : List.of(builder, other)) {
+            error(browser.request("GET", path, null, false), 404, "PROJECT_NOT_FOUND");
+            error(
+                    browser.request("POST", path + "/plot-checks", body, true),
+                    404,
+                    "PROJECT_NOT_FOUND");
+            error(
+                    browser.request("POST", path + "/calculations", Map.of(), true),
+                    404,
+                    "PROJECT_NOT_FOUND");
+        }
+        error(new Browser().request("GET", path, null, false), 401, "AUTH_REQUIRED");
+        error(owner.request("POST", path + "/plot-checks", body, false), 403, "INVALID_CSRF_TOKEN");
+        var empty = json(owner.request("GET", path, null, false));
+        assertThat(empty.path("version").asInt()).isZero();
+        assertThat(
+                        jdbc.queryForObject(
+                                "select count(*) from project_financing_plans where project_id=?",
+                                Integer.class,
+                                UUID.fromString(id)))
+                .isZero();
+        var legacy = owner.project();
+        assertThat(
+                        json(owner.request(
+                                        "GET",
+                                        "/projects/" + legacy + "/financing-planning",
+                                        null,
+                                        false))
+                                .path("editable")
+                                .asBoolean())
+                .isFalse();
+        error(
+                owner.request(
+                        "POST",
+                        "/projects/" + legacy + "/financing-planning/plot-checks",
+                        financingCommand(0, 0),
+                        true),
+                409,
+                "REQUEST_LOCKED");
+    }
+
+    @Test
+    @DisplayName(
+            "Недоступность и неверная схема источника сохраняют прежний результат и допускают повтор")
+    void financingUnavailable() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var checked = financingCheck(owner, id);
+        var path = "/projects/" + id + "/financing-planning";
+        var body = financingCommand(req.path("version").asLong(), checked.path("version").asLong());
+        for (String scenario : List.of("ERROR", "INVALID")) {
+            bank.plotScenario(scenario);
+            error(
+                    owner.request("POST", path + "/plot-checks", body, true),
+                    503,
+                    "BANK_DEMO_UNAVAILABLE");
+            assertThat(json(owner.request("GET", path, null, false))).isEqualTo(checked);
+        }
+        bank.plotScenario("NORMAL");
+        assertThat(owner.request("POST", path + "/plot-checks", body, true).statusCode())
+                .isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName(
+            "Повторы проверки не вызывают источник, конкурирующие команды сохраняют один результат")
+    void financingConcurrency() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var path = "/projects/" + id + "/financing-planning/plot-checks";
+        var body = financingCommand(req.path("version").asLong(), 0);
+        bank.plotScenario("SLOW");
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> owner.request("POST", path, body, true));
+            var second = pool.submit(() -> owner.request("POST", path, body, true));
+            var a = first.get(15, TimeUnit.SECONDS);
+            var b = second.get(15, TimeUnit.SECONDS);
+            assertThat(a.statusCode()).as(a.body()).isEqualTo(200);
+            assertThat(json(a)).isEqualTo(json(b));
+        }
+        bank.plotScenario("NORMAL");
+        long calls = bank.plotRequests();
+        assertThat(owner.request("POST", path, body, true).statusCode()).isEqualTo(200);
+        assertThat(bank.plotRequests()).isEqualTo(calls);
+        body.put("planningVersion", 1);
+        error(owner.request("POST", path, body, true), 409, "IDEMPOTENCY_CONFLICT");
+        var one = financingCommand(req.path("version").asLong(), 1);
+        var two = financingCommand(req.path("version").asLong(), 1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var a = pool.submit(() -> owner.request("POST", path, one, true));
+            var b = pool.submit(() -> owner.request("POST", path, two, true));
+            assertThat(
+                            List.of(
+                                    a.get(15, TimeUnit.SECONDS).statusCode(),
+                                    b.get(15, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 409);
+        }
+        assertThat(
+                        jdbc.queryForObject(
+                                "select count(*) from project_plot_checks where project_id=?",
+                                Integer.class,
+                                UUID.fromString(id)))
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Изменение номера во время HTTP не сохраняет результат прежней версии")
+    void financingRequestRace() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var path = "/projects/" + id + "/financing-planning";
+        bank.plotScenario("SLOW");
+        long before = bank.plotRequests();
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            var result =
+                    pool.submit(() ->
+                            owner.request(
+                                    "POST",
+                                    path + "/plot-checks",
+                                    financingCommand(req.path("version").asLong(), 0),
+                                    true));
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(5))
+                    .until(() -> bank.plotRequests() > before);
+            financingNumber(owner, id, "31:15:1203001:88");
+            error(result.get(10, TimeUnit.SECONDS), 409, "STALE_REQUEST_VERSION");
+        }
+        assertThat(json(owner.request("GET", path, null, false)).path("plotCheck").isNull())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("Лимит, строгие поля, чужая проверка и режим чтения защищены сервером")
+    void financingCalculationGuards() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        preparationRequest(owner, id, "OWN_FUNDS");
+        var builder = new Browser().account("CONTRACTOR");
+        owner.assign(id, builder.email);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var checked = financingCheck(owner, id);
+        var path = "/projects/" + id + "/financing-planning";
+        long version = req.path("version").asLong();
+        var body = financingCalculation(checked, version);
+        body.put("rate", 0);
+        error(owner.request("POST", path + "/calculations", body, true), 400, "VALIDATION_ERROR");
+        body.remove("rate");
+        body.put("years", 1.5);
+        error(owner.request("POST", path + "/calculations", body, true), 400, "VALIDATION_ERROR");
+        body.put("years", 20);
+        body.put("plotCheckId", UUID.randomUUID());
+        error(
+                owner.request("POST", path + "/calculations", body, true),
+                409,
+                "STALE_FINANCING_PLAN");
+        body.put("plotCheckId", checked.path("plotCheck").path("id").asText());
+        body.put("cost", 10000000);
+        var response = owner.request("POST", path + "/calculations", body, true);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        var over = json(response);
+        assertThat(over.path("calculation").path("withinLimit").asBoolean()).isFalse();
+        var joint = financingCalculation(over, version);
+        joint.put("cost", 10000000);
+        joint.put("joint", true);
+        var jointResult = owner.request("POST", path + "/calculations", joint, true);
+        assertThat(jointResult.statusCode()).isEqualTo(200);
+        assertThat(json(jointResult).path("calculation").path("withinLimit").asBoolean()).isTrue();
+        assertThat(
+                        owner.request(
+                                        "POST",
+                                        "/projects/" + id + "/request/submit",
+                                        Map.of("version", version),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        assertThat(json(owner.request("GET", path, null, false)).path("editable").asBoolean())
+                .isFalse();
+        error(
+                owner.request(
+                        "POST",
+                        path + "/plot-checks",
+                        financingCommand(version, json(jointResult).path("version").asLong()),
+                        true),
+                409,
+                "REQUEST_LOCKED");
+        assertThat(owner.request("POST", path + "/calculations", joint, true).statusCode())
+                .isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("База запрещает связывать расчёт с проверкой другой карточки")
+    void financingDatabaseIntegrity() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var one = preparationProject(owner);
+        var two = preparationProject(owner);
+        var req = financingNumber(owner, one, "16:24:070801:412");
+        financingNumber(owner, two, "31:15:1203001:88");
+        var checked = financingCheck(owner, one);
+        var other = financingCheck(owner, two);
+        var saved =
+                owner.request(
+                        "POST",
+                        "/projects/" + one + "/financing-planning/calculations",
+                        financingCalculation(checked, req.path("version").asLong()),
+                        true);
+        assertThat(saved.statusCode()).as(saved.body()).isEqualTo(200);
+        UUID result = UUID.fromString(json(saved).path("calculation").path("id").asText());
+        UUID otherCheck = UUID.fromString(other.path("plotCheck").path("id").asText());
+        assertThatThrownBy(() ->
+                        jdbc.update(
+                                "update project_mortgage_calculations set plot_check_id=? where id=?",
+                                otherCheck,
+                                result))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() ->
+                        jdbc.update(
+                                "update project_mortgage_calculations set deposit_percent=1 where id=?",
+                                result))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("Команда подрядчика не видит планирование отправленной заявки")
+    void financingTeamIsolation() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var director = new Browser().account("CONTRACTOR");
+        var lawyer = employee("Проверяющая Мария");
+        var membership = join(director, lawyer, "Юрист");
+        var id = preparationProject(owner);
+        owner.assign(id, director.email);
+        preparationRequest(owner, id, "OWN_FUNDS");
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var checked = financingCheck(owner, id);
+        assertThat(
+                        owner.request(
+                                        "POST",
+                                        "/projects/" + id + "/request/submit",
+                                        Map.of("version", req.path("version").asLong()),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        team(director, id, List.of(grant(membership, true, false)), 0);
+        assertThat(lawyer.request("GET", "/projects/" + id, null, false).statusCode())
+                .isEqualTo(200);
+        var root = "/projects/" + id + "/financing-planning";
+        for (var actor : List.of(director, lawyer)) {
+            error(actor.request("GET", root, null, false), 404, "PROJECT_NOT_FOUND");
+            error(
+                    actor.request(
+                            "POST",
+                            root + "/plot-checks",
+                            financingCommand(
+                                    req.path("version").asLong(), checked.path("version").asLong()),
+                            true),
+                    404,
+                    "PROJECT_NOT_FOUND");
+        }
+    }
+
+    @ParameterizedTest(name = "Изменение во время HTTP: {0}")
+    @ValueSource(strings = {"SUBMIT", "COMPLETE", "CLOSE"})
+    @DisplayName("Отправка заявки и закрытие проекта во время проверки отменяют запись")
+    void financingStateRace(String transition) throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var builder = new Browser().account("CONTRACTOR");
+        var id = preparationProject(owner);
+        owner.assign(id, builder.email);
+        preparationRequest(owner, id, "OWN_FUNDS");
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        long version = req.path("version").asLong();
+        var root = "/projects/" + id + "/financing-planning";
+        bank.plotScenario("SLOW");
+        long before = bank.plotRequests();
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            var future =
+                    pool.submit(() ->
+                            owner.request(
+                                    "POST",
+                                    root + "/plot-checks",
+                                    financingCommand(version, 0),
+                                    true));
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(5))
+                    .until(() -> bank.plotRequests() > before);
+            if (transition.equals("SUBMIT")) {
+                assertThat(
+                                owner.request(
+                                                "POST",
+                                                "/projects/" + id + "/request/submit",
+                                                Map.of("version", version),
+                                                true)
+                                        .statusCode())
+                        .isEqualTo(200);
+            } else if (transition.equals("COMPLETE")) {
+                // Имитируем уже проверенный переход существующего модуля, не меняя его сценарий.
+                jdbc.update(
+                        "update house_projects set completed_at=now(), completed_by_snapshot=jsonb_build_object('accountId',customer_id,'globalRole','CUSTOMER','legacy',true) where id=?",
+                        UUID.fromString(id));
+            } else {
+                jdbc.update(
+                        "update house_projects set preparation_closed=true where id=?",
+                        UUID.fromString(id));
+            }
+            error(future.get(10, TimeUnit.SECONDS), 409, "REQUEST_LOCKED");
+        }
+        assertThat(json(owner.request("GET", root, null, false)).path("plotCheck").isNull())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("Ровно лимит допустим, а смена финансирования не стирает личный расчёт")
+    void financingExactLimitAndFunding() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        preparationRequest(owner, id, "RSHB_RURAL_MORTGAGE");
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var checked = financingCheck(owner, id);
+        var body = financingCalculation(checked, req.path("version").asLong());
+        body.put("cost", 10000000);
+        body.put("depositPercent", 40);
+        var root = "/projects/" + id;
+        var response = owner.request("POST", root + "/financing-planning/calculations", body, true);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        assertThat(json(response).path("calculation").path("principal").asInt()).isEqualTo(6000000);
+        assertThat(json(response).path("calculation").path("withinLimit").asBoolean()).isTrue();
+        assertThat(
+                        owner.request(
+                                        "PATCH",
+                                        root + "/request",
+                                        Map.of(
+                                                "version",
+                                                req.path("version").asLong(),
+                                                "financingSource",
+                                                "OWN_FUNDS"),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        assertThat(
+                        json(owner.request("GET", root + "/financing-planning", null, false))
+                                .path("calculation"))
+                .isEqualTo(json(response).path("calculation"));
+    }
+
+    @Test
+    @DisplayName("Пустой номер и неверные типы параметров не создают план или запрос к источнику")
+    void financingMissingAndInvalidInput() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        var root = "/projects/" + id + "/financing-planning";
+        long before = bank.plotRequests();
+        var empty = owner.request("POST", root + "/plot-checks", financingCommand(0, 0), true);
+        error(empty, 400, "VALIDATION_ERROR");
+        assertThat(json(empty).path("fieldErrors").has("cadastralNumber")).isTrue();
+        assertThat(bank.plotRequests()).isEqualTo(before);
+        var req = financingNumber(owner, id, "16:24:070801:412");
+        var checked = financingCheck(owner, id);
+        for (var bad :
+                List.of(
+                        Map.entry("cost", (Object) "5000000"),
+                        Map.entry("depositPercent", (Object) 20.5),
+                        Map.entry("joint", (Object) "true"),
+                        Map.entry("years", (Object) "20"),
+                        Map.entry("requestVersion", (Object) "1"),
+                        Map.entry("idempotencyKey", (Object) "not-a-uuid"))) {
+            var body = financingCalculation(checked, req.path("version").asLong());
+            body.put(bad.getKey(), bad.getValue());
+            var response = owner.request("POST", root + "/calculations", body, true);
+            error(response, 400, "VALIDATION_ERROR");
+            assertThat(json(response).path("fieldErrors").has(bad.getKey())).isTrue();
+        }
+        assertThat(json(owner.request("GET", root, null, false)).path("version").asInt())
+                .isEqualTo(1);
+        assertThat(json(owner.request("GET", root, null, false)).path("calculation").isNull())
+                .isTrue();
     }
 }

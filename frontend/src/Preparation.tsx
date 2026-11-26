@@ -1,3 +1,4 @@
+import { FinancingPlanning } from "./FinancingPlanning";
 import {
   useEffect,
   useState,
@@ -276,6 +277,7 @@ function RequestPanel({
         });
         await onSent();
       } else setNotice("Черновик заявки сохранён");
+      return r;
     } catch (error_) {
       setError(errorMessage(error_));
       if (error_ instanceof ApiError) setInvalid(error_.fieldErrors);
@@ -419,6 +421,19 @@ function RequestPanel({
             />
           </div>
           <p>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                const title = document.getElementById("financing-title");
+                title?.scrollIntoView({ block: "start" });
+                title?.focus();
+              }}
+            >
+              Перейти к проверке участка и ипотеке
+            </button>
+          </p>
+          <p>
             Участок: <strong>{project.address}</strong>
           </p>
           <div className="detail-grid">
@@ -478,6 +493,19 @@ function RequestPanel({
             согласуются в предложении подрядчика.
           </p>
         </>
+      )}
+      {owner && (
+        <FinancingPlanning
+          key={project.id}
+          projectId={project.id}
+          requestVersion={data.version ?? 0}
+          cadastralNumber={form.cadastralNumber}
+          dirty={JSON.stringify(form) !== JSON.stringify(data)}
+          editable={draft && !project.preparationClosed && !project.completedAt}
+          onExample={(number) => value("cadastralNumber", number)}
+          onSaveDraft={async () => Boolean(await save())}
+          onFieldErrors={setInvalid}
+        />
       )}
       {owner && data.financingSource === "RSHB_RURAL_MORTGAGE" && (
         <MortgagePanel

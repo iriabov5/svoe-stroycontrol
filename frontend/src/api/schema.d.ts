@@ -1146,6 +1146,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/financing-planning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Получить личный план участка и ипотеки
+         * @description Только владелец конкретной карточки. Существующая сессия; подрядчик и команда получают 404. Новые записи — только в редактируемый черновик незавершённого проекта. Результат не меняет заявку, бюджет, финансирование и одобрение. Сервер вычисляет ставку и платёж; неизвестные поля запрещены. Повтор того же idempotencyKey и нормализованного тела возвращает сохранённый ответ; другой запрос с тем же ключом отклоняется. requestVersion и planningVersion защищают от конкуренции. POST требует CSRF.
+         */
+        get: operations["getFinancingPlanning"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/financing-planning/plot-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проверить сохранённый участок в демонстрационном контуре
+         * @description Только владелец конкретной карточки. Существующая сессия; подрядчик и команда получают 404. Новые записи — только в редактируемый черновик незавершённого проекта. Результат не меняет заявку, бюджет, финансирование и одобрение. Сервер вычисляет ставку и платёж; неизвестные поля запрещены. Повтор того же idempotencyKey и нормализованного тела возвращает сохранённый ответ; другой запрос с тем же ключом отклоняется. requestVersion и planningVersion защищают от конкуренции. POST требует CSRF.
+         */
+        post: operations["checkProjectPlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/financing-planning/calculations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Рассчитать и сохранить предварительную ипотеку
+         * @description Только владелец конкретной карточки. Существующая сессия; подрядчик и команда получают 404. Новые записи — только в редактируемый черновик незавершённого проекта. Результат не меняет заявку, бюджет, финансирование и одобрение. Сервер вычисляет ставку и платёж; неизвестные поля запрещены. Повтор того же idempotencyKey и нормализованного тела возвращает сохранённый ответ; другой запрос с тем же ключом отклоняется. requestVersion и planningVersion защищают от конкуренции. POST требует CSRF.
+         */
+        post: operations["calculateProjectMortgage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1228,7 +1294,7 @@ export interface components {
             title: string;
             status: number;
             /** @enum {string} */
-            code: "VALIDATION_ERROR" | "EMAIL_ALREADY_EXISTS" | "INVALID_CREDENTIALS" | "AUTH_REQUIRED" | "INVALID_CSRF_TOKEN" | "FORBIDDEN" | "PROJECT_NOT_FOUND" | "CONTRACTOR_NOT_FOUND" | "CONTRACTOR_ALREADY_ASSIGNED" | "UNSUPPORTED_MEDIA_TYPE" | "INVALID_STAGE_DATES" | "STAGE_NOT_FOUND" | "STALE_STAGE_VERSION" | "INVALID_STAGE_TRANSITION" | "PROPOSAL_NOT_FOUND" | "CONTRACT_NOT_FOUND" | "STALE_REQUEST_VERSION" | "STALE_PROPOSAL_VERSION" | "STALE_CONTRACT_VERSION" | "INVALID_PROPOSAL_STATE" | "INVALID_CONTRACT_STATE" | "REQUEST_LOCKED" | "CONTRACTOR_REQUIRED" | "APPROVED_PLAN_LOCKED" | "CONTRACT_REQUIRED" | "BANK_DEMO_UNAVAILABLE" | "IDEMPOTENCY_CONFLICT" | "JOURNAL_ENTRY_NOT_FOUND" | "JOURNAL_STAGE_STATE" | "STALE_JOURNAL_VERSION" | "JOURNAL_ALREADY_RESOLVED" | "PREPARATION_CLOSED" | "REQUEST_ALREADY_REISSUED" | "INVALID_REISSUE_CONTRACTOR" | "PROFILE_REQUIRED" | "STALE_PROFILE_VERSION" | "ORGANIZATION_NOT_FOUND" | "INVITATION_NOT_FOUND" | "STALE_ORGANIZATION_VERSION" | "STALE_TEAM_VERSION" | "MEMBERSHIP_CONFLICT" | "ORGANIZATION_ALREADY_EXISTS" | "INVALID_TEAM_MEMBER" | "CONTRACTOR_PROFILE_REQUIRED" | "ATTACHMENT_NOT_FOUND" | "ATTACHMENT_NOT_READY" | "ATTACHMENT_TOO_LARGE" | "STORAGE_UNAVAILABLE" | "ACCEPTANCE_NOT_FOUND" | "STALE_ACCEPTANCE_VERSION" | "INVALID_ACCEPTANCE_STATE" | "CONSTRUCTION_NOT_READY" | "CONSTRUCTION_COMPLETED" | "BANK_CASE_REQUIRED" | "STALE_BANK_VERSION" | "INVALID_BANK_SUBMISSION_STATE";
+            code: "VALIDATION_ERROR" | "EMAIL_ALREADY_EXISTS" | "INVALID_CREDENTIALS" | "AUTH_REQUIRED" | "INVALID_CSRF_TOKEN" | "FORBIDDEN" | "PROJECT_NOT_FOUND" | "CONTRACTOR_NOT_FOUND" | "CONTRACTOR_ALREADY_ASSIGNED" | "UNSUPPORTED_MEDIA_TYPE" | "INVALID_STAGE_DATES" | "STAGE_NOT_FOUND" | "STALE_STAGE_VERSION" | "INVALID_STAGE_TRANSITION" | "PROPOSAL_NOT_FOUND" | "CONTRACT_NOT_FOUND" | "STALE_REQUEST_VERSION" | "STALE_PROPOSAL_VERSION" | "STALE_CONTRACT_VERSION" | "INVALID_PROPOSAL_STATE" | "INVALID_CONTRACT_STATE" | "REQUEST_LOCKED" | "CONTRACTOR_REQUIRED" | "APPROVED_PLAN_LOCKED" | "CONTRACT_REQUIRED" | "BANK_DEMO_UNAVAILABLE" | "IDEMPOTENCY_CONFLICT" | "JOURNAL_ENTRY_NOT_FOUND" | "JOURNAL_STAGE_STATE" | "STALE_JOURNAL_VERSION" | "JOURNAL_ALREADY_RESOLVED" | "PREPARATION_CLOSED" | "REQUEST_ALREADY_REISSUED" | "INVALID_REISSUE_CONTRACTOR" | "PROFILE_REQUIRED" | "STALE_PROFILE_VERSION" | "ORGANIZATION_NOT_FOUND" | "INVITATION_NOT_FOUND" | "STALE_ORGANIZATION_VERSION" | "STALE_TEAM_VERSION" | "MEMBERSHIP_CONFLICT" | "ORGANIZATION_ALREADY_EXISTS" | "INVALID_TEAM_MEMBER" | "CONTRACTOR_PROFILE_REQUIRED" | "ATTACHMENT_NOT_FOUND" | "ATTACHMENT_NOT_READY" | "ATTACHMENT_TOO_LARGE" | "STORAGE_UNAVAILABLE" | "ACCEPTANCE_NOT_FOUND" | "STALE_ACCEPTANCE_VERSION" | "INVALID_ACCEPTANCE_STATE" | "CONSTRUCTION_NOT_READY" | "CONSTRUCTION_COMPLETED" | "BANK_CASE_REQUIRED" | "STALE_BANK_VERSION" | "INVALID_BANK_SUBMISSION_STATE" | "STALE_FINANCING_PLAN";
             detail?: string;
             /** @description Сообщения по именам полей API */
             fieldErrors?: {
@@ -1943,6 +2009,71 @@ export interface components {
             id: string;
             /** @constant */
             isDemo: true;
+        };
+        PlotCheckCommand: {
+            requestVersion: number;
+            planningVersion: number;
+            /** Format: uuid */
+            idempotencyKey: string;
+        };
+        MortgageCalculationCommand: {
+            requestVersion: number;
+            planningVersion: number;
+            /** Format: uuid */
+            idempotencyKey: string;
+            /** Format: uuid */
+            plotCheckId: string;
+            cost: number;
+            depositPercent: number;
+            years: number;
+            joint: boolean;
+        };
+        ProjectPlotCheck: {
+            /** Format: uuid */
+            id: string;
+            cadastralNumber: string;
+            /** @enum {string} */
+            status: "ELIGIBLE" | "INELIGIBLE" | "NOT_FOUND";
+            address: string | null;
+            region: string | null;
+            landCategory: string | null;
+            permittedUse: string | null;
+            reason: string | null;
+            rate: number | null;
+            termsVersion: string | null;
+            /** Format: date-time */
+            checkedAt: string;
+            /** @constant */
+            isDemo: true;
+        };
+        ProjectMortgageCalculation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            plotCheckId: string;
+            cost: number;
+            depositPercent: number;
+            depositAmount: number;
+            years: number;
+            joint: boolean;
+            principal: number;
+            rate: number;
+            creditLimit: number;
+            monthlyPayment: number;
+            withinLimit: boolean;
+            termsVersion: string;
+            /** Format: date-time */
+            calculatedAt: string;
+            /** @constant */
+            isDemo: true;
+        };
+        FinancingPlanningView: {
+            version: number;
+            editable: boolean;
+            plotCheck: components["schemas"]["ProjectPlotCheck"] | null;
+            calculation: components["schemas"]["ProjectMortgageCalculation"] | null;
+            plotCheckCurrent: boolean;
+            calculationCurrent: boolean;
         };
     };
     responses: {
@@ -6908,6 +7039,240 @@ export interface operations {
                 };
             };
             /** @description Ошибка согласия, доступа, состояния или демо-банка */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFinancingPlanning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Личное состояние планирования; NOT_FOUND участка — успешный результат демопроверки. Превышение лимита сохраняется с withinLimit=false. */
+            200: {
+                headers: {
+                    /** @description Результаты не кэшируются */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancingPlanningView"];
+                };
+            };
+            /** @description Ошибка полей */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Требуется вход */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Карточка отсутствует или пользователь не владелец */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    checkProjectPlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "requestVersion": 1,
+                 *       "planningVersion": 0,
+                 *       "idempotencyKey": "11111111-1111-4111-8111-111111111111"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PlotCheckCommand"];
+            };
+        };
+        responses: {
+            /** @description Личное состояние планирования; NOT_FOUND участка — успешный результат демопроверки. Превышение лимита сохраняется с withinLimit=false. */
+            200: {
+                headers: {
+                    /** @description Результаты не кэшируются */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancingPlanningView"];
+                };
+            };
+            /** @description Ошибка полей */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Требуется вход */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недопустимый CSRF */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Карточка отсутствует или пользователь не владелец */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description REQUEST_LOCKED, STALE_REQUEST_VERSION, STALE_FINANCING_PLAN или IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description BANK_DEMO_UNAVAILABLE: локальный источник недоступен */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    calculateProjectMortgage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "requestVersion": 1,
+                 *       "planningVersion": 1,
+                 *       "idempotencyKey": "11111111-1111-4111-8111-111111111112",
+                 *       "plotCheckId": "22222222-2222-4222-8222-222222222222",
+                 *       "cost": 5000000,
+                 *       "depositPercent": 20,
+                 *       "years": 20,
+                 *       "joint": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["MortgageCalculationCommand"];
+            };
+        };
+        responses: {
+            /** @description Личное состояние планирования; NOT_FOUND участка — успешный результат демопроверки. Превышение лимита сохраняется с withinLimit=false. */
+            200: {
+                headers: {
+                    /** @description Результаты не кэшируются */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancingPlanningView"];
+                };
+            };
+            /** @description Ошибка полей */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Требуется вход */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недопустимый CSRF */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Карточка отсутствует или пользователь не владелец */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description REQUEST_LOCKED, STALE_REQUEST_VERSION, STALE_FINANCING_PLAN или IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description BANK_DEMO_UNAVAILABLE: локальный источник недоступен */
             503: {
                 headers: {
                     [name: string]: unknown;

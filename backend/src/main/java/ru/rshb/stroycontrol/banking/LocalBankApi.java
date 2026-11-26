@@ -1,5 +1,6 @@
 package ru.rshb.stroycontrol.banking;
 
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import jakarta.annotation.PostConstruct;
@@ -16,10 +17,12 @@ import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Локальный HTTP Mock API: отдаёт только синтетическое решение и не обращается в банк. */
 @Component
@@ -30,6 +33,11 @@ public class LocalBankApi {
 
     @Value("${bank.demo.scenario:FOUND}")
     private volatile String scenario;
+
+    @Value("${bank.plot.scenario:NORMAL}")
+    private volatile String plotScenario;
+
+    private final AtomicLong plotRequests = new AtomicLong();
 
     /**
      * Открывает локальный HTTP Mock API после внедрения конфигурации Spring.
@@ -53,10 +61,6 @@ public class LocalBankApi {
                     switch (currentScenario) {
                         case "NOT_FOUND" ->
                                 body = mapper.writeValueAsString(Map.of("status", "NOT_FOUND"));
-                        case "ERROR" -> {
-                            body = "{}";
-                            status = 503;
-                        }
                         case "EXPIRED", "FOUND" -> {
                             boolean expired = currentScenario.equals("EXPIRED");
                             body =
@@ -92,7 +96,42 @@ public class LocalBankApi {
                         stream.write(bytes);
                     }
                 });
+        server.createContext("/plot-check", this::checkPlot);
         server.start();
+    }
+
+    /**
+     * Обслуживает только синтетическую проверку участка на существующем loopback-сервере.
+     *
+     * @param exchange локальный HTTP-запрос проверки
+     * @throws IOException при ошибке записи ответа
+     */
+    private void checkPlot(HttpExchange exchange) throws IOException {
+        plotRequests.incrementAndGet();
+        String currentScenario = plotScenario;
+        if ("SLOW".equals(currentScenario)) {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        int status = "ERROR".equals(currentScenario) ? 503 : 200;
+        String query = exchange.getRequestURI().getRawQuery();
+        String number =
+                query != null && query.startsWith("number=")
+                        ? URLDecoder.decode(query.substring(7), StandardCharsets.UTF_8)
+                        : "";
+        byte[] bytes =
+                ("INVALID".equals(currentScenario)
+                                ? "{}"
+                                : mapper.writeValueAsString(PlotDemoData.result(number)))
+                        .getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (var stream = exchange.getResponseBody()) {
+            stream.write(bytes);
+        }
     }
 
     /**
@@ -118,6 +157,33 @@ public class LocalBankApi {
      */
     public void scenario(String scenario) {
         this.scenario = scenario;
+    }
+
+    /**
+     * Возвращает число обращений к демоисточнику для диагностики и проверки безопасного повтора.
+     *
+     * @return счётчик начатых HTTP-запросов проверки участка
+     */
+    public long plotRequests() {
+        return plotRequests.get();
+    }
+
+    /**
+     * Выбирает воспроизводимый сценарий проверки участка для стенда и тестов.
+     *
+     * @param scenario NORMAL, ERROR, INVALID либо SLOW
+     */
+    public void plotScenario(String scenario) {
+        this.plotScenario = scenario;
+    }
+
+    /**
+     * Возвращает локальный маршрут проверки участка на том же сервере.
+     *
+     * @return loopback URL без банковских учётных данных
+     */
+    String plotUrl() {
+        return url().replace("/approval", "/plot-check");
     }
 
     /** Останавливает локальный HTTP-сервер при завершении Spring-контекста. */

@@ -74,7 +74,7 @@ export function ProjectList({ account }: Readonly<{ account: Account }>) {
           </h2>
           <p>
             {customer
-              ? "Создайте первую карточку: укажите название и адрес. Затем сможете дать подрядчику доступ."
+              ? "Создайте карточку дома, чтобы проверить участок, рассчитать ипотечный платёж и подготовить заявку подрядчику."
               : `Попросите заказчика назначить вас по email ${account.email}. После отправки заявки карточка появится здесь.`}
           </p>
           {customer && (
@@ -326,6 +326,17 @@ export function ProjectDetail({
             </section>
           )}
         </div>
+        {project.processMode !== "PROPOSAL_REQUIRED" &&
+          account.id === project.customerId && (
+            <section className="panel">
+              <h2>Участок и ипотека</h2>
+              <Notice>
+                В карточке прежнего процесса нет черновика заявки. Проверка
+                участка и расчёт доступны в новой карточке при подготовке
+                строительства.
+              </Notice>
+            </section>
+          )}
         {project.processMode === "PROPOSAL_REQUIRED" && (
           <Preparation
             project={project}

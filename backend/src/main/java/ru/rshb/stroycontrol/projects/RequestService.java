@@ -42,7 +42,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-class RequestService implements MortgageRequests {
+class RequestService implements MortgageRequests, FinancingRequests {
     private static final String FIELD_DESCRIPTION = "description";
     private static final String FIELD_TECHNOLOGY = "technology";
     private static final String FIELD_TECHNOLOGY_RECOMMENDATION = "technologyRecommendation";
@@ -426,6 +426,41 @@ class RequestService implements MortgageRequests {
     public boolean mortgageSelected(UUID id, UUID actorId) {
         mortgageSnapshot(id, actorId);
         return STATE_RSHB_RURAL_MORTGAGE.equals(request(id).getFinancingSource());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(readOnly = true)
+    public FinancingRequests.Context financingContext(UUID projectId, UUID actorId) {
+        return financingContext(project(projectId, actorId, false), actorId);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public FinancingRequests.Context lockFinancingContext(UUID projectId, UUID actorId) {
+        return financingContext(project(projectId, actorId, true), actorId);
+    }
+
+    /**
+     * Не раскрывает личное планирование подрядчику и не создаёт фиктивные заявки прежнего режима.
+     *
+     * @param project уже проверенная карточка
+     * @param actorId аккаунт владельца
+     * @return сохранённый номер и доступность планирования
+     */
+    private FinancingRequests.Context financingContext(HouseProject project, UUID actorId) {
+        if (!project.getCustomerId().equals(actorId))
+            throw new ApiException(ApiError.PROJECT_NOT_FOUND);
+        var request = requests.findByProjectId(project.getId()).orElse(null);
+        return new FinancingRequests.Context(
+                request == null ? null : request.getCadastralNumber(),
+                request == null ? 0 : request.getVersion(),
+                request != null
+                        && "DRAFT".equals(request.getState())
+                        && !"LEGACY".equals(project.getProcessMode())
+                        && !project.isPreparationClosed()
+                        && project.getCompletedAt() == null);
     }
 
     /**

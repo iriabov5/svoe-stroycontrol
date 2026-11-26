@@ -17,6 +17,7 @@ import ru.rshb.stroycontrol.common.PreparationInput;
 
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -82,7 +83,7 @@ class AccountService implements Accounts {
                     Account.builder()
                             .email(normalized)
                             .role(role)
-                            .passwordHash(encoder.encode(password))
+                            .passwordHash(Objects.requireNonNull(encoder.encode(password)))
                             .displayName(displayName == null ? null : profileName(displayName))
                             .build();
             return repository.saveAndFlush(account).view();

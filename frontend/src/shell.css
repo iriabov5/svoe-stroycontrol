@@ -1859,3 +1859,128 @@ fieldset.journal-filters {
 .file-picker input.sr-only {
   width: 1px;
 }
+
+/* Личное планирование в существующей карточке строительства. */
+.financing-planning {
+  margin-top: 1.5rem;
+  scroll-margin-top: 1.5rem;
+}
+.financing-intro {
+  max-width: 48rem;
+  color: var(--text);
+}
+.plot-check-start {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 0;
+}
+.plot-number {
+  margin: 0.35rem 0 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.plot-examples {
+  padding-bottom: 1rem;
+}
+.plot-examples .form-actions {
+  margin-top: 0.6rem;
+}
+.plot-result,
+.saved-calculation {
+  padding: 1.25rem;
+  border: 1px solid #dce5df;
+  border-radius: 16px;
+  margin-top: 1rem;
+  background: #f8faf8;
+}
+.plot-eligible {
+  border-left: 4px solid #2b7652;
+}
+.financing-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.financing-details dt {
+  color: #536659;
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+.financing-details dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.mortgage-calculator {
+  border-top: 1px solid #dce5df;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+.calculator-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+.calculator-fields {
+  display: grid;
+  gap: 0.6rem;
+}
+.calculator-fields input[type="range"] {
+  width: 100%;
+  accent-color: #236847;
+  margin: 0 0 1rem;
+}
+.calculator-fields .check-label {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  font-size: 0.95rem;
+}
+.financing-planning .payment-panel {
+  background: #eef4ed;
+  border-radius: 16px;
+  padding: 1.5rem;
+  align-self: start;
+}
+.payment-value {
+  display: block;
+  font-size: clamp(1.8rem, 4vw, 2.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  color: #1d533a;
+  margin-bottom: 1.5rem;
+}
+.payment-panel .financing-details {
+  grid-template-columns: 1fr;
+}
+.payment-panel .button {
+  width: 100%;
+  margin-top: 1rem;
+}
+.financing-planning h3 {
+  margin-top: 0;
+}
+@media (max-width: 700px) {
+  .calculator-layout {
+    grid-template-columns: 1fr;
+  }
+  .financing-details {
+    grid-template-columns: 1fr;
+  }
+  .plot-check-start {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .financing-planning .section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .plot-result,
+  .saved-calculation,
+  .financing-planning .payment-panel {
+    padding: 1rem;
+  }
+}

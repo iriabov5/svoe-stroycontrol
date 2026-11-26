@@ -47,6 +47,8 @@ storage:
   bucket: ${STORAGE_BUCKET:stroycontrol-private}
 
 bank:
+  plot:
+    scenario: ${BANK_PLOT_SCENARIO:NORMAL}
   stage:
     scenario: ${BANK_STAGE_SCENARIO:ACCEPTED}
 

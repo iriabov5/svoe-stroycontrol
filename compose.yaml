@@ -41,6 +41,7 @@ services:
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-local-stroycontrol}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
       STORAGE_BUCKET: ${STORAGE_BUCKET:-stroycontrol-private}
+      BANK_PLOT_SCENARIO: ${BANK_PLOT_SCENARIO:-NORMAL}
       BANK_STAGE_SCENARIO: ${BANK_STAGE_SCENARIO:-NEEDS_INFORMATION}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
@@ -61,7 +62,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "${FRONTEND_PORT:-8088}:80"
+      - "${FRONTEND_PORT:-8088}:8080"
     depends_on:
       backend:
         condition: service_healthy
