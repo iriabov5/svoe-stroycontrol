@@ -119,7 +119,9 @@ test("План этапов, порядок и даты доступны обе�
   );
   await page.getByLabel("Плановое завершение").fill(before(1));
   await page.getByRole("button", { name: "Сохранить план" }).click();
-  await expect(page.getByRole("status")).toContainText("План этапа сохранён");
+  await expect(
+    page.getByRole("status").filter({ hasText: "План этапа сохранён" }),
+  ).toContainText("План этапа сохранён");
   await page.getByRole("button", { name: "Выйти" }).click();
   await expect(
     page.getByRole("heading", { name: "С возвращением" }),
@@ -131,9 +133,9 @@ test("План этапов, порядок и даты доступны обе�
   );
   await page.getByRole("link", { name: "Фундамент", exact: true }).click();
   await page.getByRole("button", { name: "Начать работы" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "Начало работ зафиксировано",
-  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "Начало работ зафиксировано" }),
+  ).toContainText("Начало работ зафиксировано");
   await page.reload();
   await expect(page.getByText("В работе", { exact: true })).toBeVisible();
   await expect(

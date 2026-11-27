@@ -164,6 +164,8 @@ export function AcceptancePanel({
   return (
     <section
       className="panel acceptance-panel"
+      data-acceptance-loaded={data ? "true" : "false"}
+      data-submission-id={latest?.id}
       aria-labelledby="acceptance-title"
     >
       <div className="heading-row">
@@ -415,6 +417,7 @@ export function AcceptancePanel({
           {data.submissions.map((item) => (
             <article
               className="submission-history-item"
+              data-submission-id={item.id}
               aria-label={"Сдача №" + item.cycleNumber}
               key={item.id}
             >

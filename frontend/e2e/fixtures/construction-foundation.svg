@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="680" viewBox="0 0 960 680">
+<rect width="960" height="680" fill="#f4f7ef"/><text x="48" y="65" font-family="sans-serif" font-size="27" fill="#214e35">Синтетический пример · основание дома</text>
+<path d="M160 240 L590 160 L820 350 L390 460 Z" fill="#b6c5af" stroke="#526c50" stroke-width="16"/>
+<path d="M160 240 L160 330 L390 550 L390 460 M390 550 L820 440 L820 350" fill="#93a98b" stroke="#526c50" stroke-width="12"/>
+<g stroke="#4d6b51" stroke-width="5"><path d="M220 244 L442 438 M290 230 L512 423 M360 217 L582 409 M430 203 L652 395 M500 190 L722 380 M570 177 L792 365"/><path d="M205 280 L635 200 M250 320 L680 240 M295 360 L725 280 M340 400 L770 320"/></g>
+<rect x="48" y="583" width="864" height="58" rx="12" fill="#e0ebda"/><text x="70" y="619" font-family="sans-serif" font-size="21" fill="#214e35">Демонстрационная иллюстрация. Не подтверждение качества работ.</text>
+</svg>

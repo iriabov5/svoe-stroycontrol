@@ -19,7 +19,9 @@ import ru.rshb.stroycontrol.stages.Stages;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Подтверждает завершение под той же блокировкой, которая сериализует план и решения приёмки. */
 @Service
@@ -79,9 +81,12 @@ class CompletionService {
 
     private CompletionView view(HouseProject p, UUID actor) {
         var plan = stages.plan(p.getId(), actor);
-        var accepted = acceptance.acceptedStages(p.getId());
-        int count = (int) plan.stream().filter(s -> accepted.contains(s.id())).count();
-        boolean ready = !plan.isEmpty() && count == plan.size();
+        var readiness =
+                Acceptance.Readiness.from(
+                        plan.stream().map(s -> s.id()).collect(Collectors.toSet()),
+                        acceptance.latestCycles(Set.of(p.getId())).values());
+        int count = readiness.accepted();
+        boolean ready = readiness.ready();
         boolean owner = p.getCustomerId().equals(actor);
         return new CompletionView(
                 p.getId(),

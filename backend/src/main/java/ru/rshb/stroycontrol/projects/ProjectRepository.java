@@ -85,4 +85,12 @@ interface ProjectRepository extends JpaRepository<HouseProject, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from HouseProject p where p.id=:id")
     Optional<HouseProject> lockById(UUID id);
+
+    /**
+     * Возвращает кандидатов организации; фактический доступ проверяет сервис.
+     *
+     * @param organizationId текущая организация
+     * @return кандидаты карточек
+     */
+    List<HouseProject> findByContractorOrganizationId(UUID organizationId);
 }

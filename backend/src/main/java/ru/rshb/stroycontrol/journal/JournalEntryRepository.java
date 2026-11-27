@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Хранит публикации этапа. Доступ и смену состояния проверяет сервис журнала. */
@@ -64,4 +65,15 @@ interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID> {
             where e.projectId = :project and e.stageId = :stage and e.status = 'PENDING'
             """)
     long countAwaiting(UUID project, UUID stage);
+
+    /**
+     * Читает опубликованные NOTE сразу для авторизованного набора.
+     *
+     * @param projects карточки
+     * @param kind NOTE
+     * @param status PUBLISHED
+     * @return публикации без загрузки фотографий по одной
+     */
+    List<JournalEntry> findByProjectIdInAndKindAndStatus(
+            Set<UUID> projects, String kind, String status);
 }

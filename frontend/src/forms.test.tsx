@@ -97,18 +97,45 @@ describe("Формы и состояния первой итерации", () =>
   });
   it("показывает email перед назначением и сохраняет его при ошибке", async () => {
     vi.mocked(api.get).mockResolvedValue(project);
-    vi.mocked(request).mockResolvedValue({
-      organization: { id: "org", displayName: "Тёплый дом", inn: "9000000014" },
-      primaryContact: {
-        accountId: "builder",
-        displayName: "Сергей Иванов",
-        globalRole: "CONTRACTOR",
-        organizationId: "org",
-        organizationName: "Тёплый дом",
-        position: "Руководитель",
-        capturedAt: null,
-        legacy: false,
-      },
+    vi.mocked(request).mockImplementation(async (path) => {
+      if (path.endsWith("/control-gates"))
+        return {
+          projectId: project.id,
+          computedAt: "2026-11-27T00:00:00Z",
+          completedAt: null,
+          groups: [],
+          primaryPointId: null,
+          actionablePointCount: 0,
+        };
+      if (path.endsWith("/construction-profile"))
+        return {
+          projectId: project.id,
+          areaM2: null,
+          floors: null,
+          wallMaterial: null,
+          foundationType: null,
+          roofType: null,
+          plannedFinish: null,
+          desiredFinish: null,
+          sources: {},
+        };
+      return {
+        organization: {
+          id: "org",
+          displayName: "Тёплый дом",
+          inn: "9000000014",
+        },
+        primaryContact: {
+          accountId: "builder",
+          displayName: "Сергей Иванов",
+          globalRole: "CONTRACTOR",
+          organizationId: "org",
+          organizationName: "Тёплый дом",
+          position: "Руководитель",
+          capturedAt: null,
+          legacy: false,
+        },
+      };
     });
     vi.mocked(api.assign).mockRejectedValue(
       new ApiError(

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -310,5 +311,14 @@ class StageService implements Stages {
     private List<StageView> views(List<ConstructionStage> stages) {
         var today = today();
         return stages.stream().map(stage -> stage.view(today)).toList();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+    public List<StageView> plans(Set<UUID> projects) {
+        return projects.isEmpty()
+                ? List.of()
+                : views(repository.findByProjectIdInOrderByPositionAscIdAsc(projects));
     }
 }

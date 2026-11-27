@@ -242,4 +242,22 @@ class AcceptanceService implements Acceptance {
                         .createdAt(clock.instant())
                         .build());
     }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Cycle> latestCycles(Set<UUID> projects) {
+        if (projects.isEmpty()) return Map.of();
+        return submissions.latest(projects).stream()
+                .collect(
+                        Collectors.toMap(
+                                AcceptanceSubmission::getStageId,
+                                s ->
+                                        new Cycle(
+                                                s.getId(),
+                                                s.getProjectId(),
+                                                s.getStageId(),
+                                                s.getCycleNumber(),
+                                                s.getState())));
+    }
 }

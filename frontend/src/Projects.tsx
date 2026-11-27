@@ -1,3 +1,5 @@
+import { ConstructionProfile, ControlGatesPanel } from "./ConstructionGuide";
+import { useGuidance, type ControlGates } from "./guidance";
 import { CompletionPanel } from "./Completion";
 import { useEffect, useState, type SubmitEvent } from "react";
 
@@ -233,6 +235,7 @@ export function ProjectDetail({
   account: Account;
   created: boolean;
 }>) {
+  const guidance = useGuidance<ControlGates>(`/projects/${id}/control-gates`);
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -309,6 +312,7 @@ export function ProjectDetail({
               Данные видны заказчику и назначенной команде подрядчика.
             </p>
           </section>
+          <ConstructionProfile key={project.id} projectId={project.id} />
           {project.contractorId ? (
             <ContractorCard
               project={project}
@@ -326,6 +330,7 @@ export function ProjectDetail({
             </section>
           )}
         </div>
+        <ControlGatesPanel state={guidance} />
         {project.processMode !== "PROPOSAL_REQUIRED" &&
           account.id === project.customerId && (
             <section className="panel">
@@ -348,6 +353,9 @@ export function ProjectDetail({
           project.approvedProposalId) && (
           <>
             <StageList
+              guidance={
+                !guidance.refreshing && !guidance.error ? guidance.data : null
+              }
               key={project.approvedProposalId ?? "legacy"}
               project={project}
               account={account}

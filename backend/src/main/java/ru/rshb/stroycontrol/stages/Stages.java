@@ -6,6 +6,7 @@ import ru.rshb.stroycontrol.common.ApiException;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /** Публичная граница создания плана из согласованного предложения. */
@@ -61,4 +62,12 @@ public interface Stages {
             String result,
             LocalDate start,
             LocalDate finish) {}
+
+    /**
+     * Читает планы уже авторизованного набора в активной транзакции.
+     *
+     * @param projects карточки, проверенные вызывающим модулем
+     * @return этапы всех карточек, отсортированные внутри плана
+     */
+    List<StageView> plans(Set<UUID> projects);
 }

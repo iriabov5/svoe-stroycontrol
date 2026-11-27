@@ -19,8 +19,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Владеет короткими транзакциями метаданных, общими для загрузки, публикации и очистки. */
 @Service
@@ -317,5 +320,17 @@ class FileTransactions implements Files {
 
     private Attempt attempt(Attachment a) {
         return new Attempt(a.getId(), a.getObjectKey(), a.getState(), a.view());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+    public Map<UUID, ImageLocation> journalImages(Set<UUID> ids) {
+        if (ids.isEmpty()) return Map.of();
+        return repository.journalImages(ids).stream()
+                .collect(
+                        Collectors.toMap(
+                                Attachment::getId,
+                                a -> new ImageLocation(a.getProjectId(), a.getStageId())));
     }
 }

@@ -35,8 +35,10 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Ведёт неизменяемую историю хода работ, вопросов и локальных согласований этапа.
@@ -440,5 +442,29 @@ class JournalService implements Journal {
         } catch (IllegalArgumentException | DateTimeException _) {
             throw new ApiException("cursor", "Обновите ленту: неверный курсор");
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+    public Set<UUID> confirmedStages(Set<UUID> projects) {
+        if (projects.isEmpty()) return Set.of();
+        var notes = entries.findByProjectIdInAndKindAndStatus(projects, "NOTE", "PUBLISHED");
+        var ids =
+                notes.stream()
+                        .flatMap(e -> e.getAttachmentIds().stream())
+                        .collect(Collectors.toSet());
+        var images = files.journalImages(ids);
+        return notes.stream()
+                .filter(e ->
+                        e.getAttachmentIds().stream()
+                                .anyMatch(id -> {
+                                    var location = images.get(id);
+                                    return location != null
+                                            && e.getProjectId().equals(location.projectId())
+                                            && e.getStageId().equals(location.stageId());
+                                }))
+                .map(JournalEntry::getStageId)
+                .collect(Collectors.toUnmodifiableSet());
     }
 }

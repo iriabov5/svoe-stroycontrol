@@ -3,6 +3,8 @@ package ru.rshb.stroycontrol.files;
 import ru.rshb.stroycontrol.common.ApiException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -38,4 +40,20 @@ public interface Files {
      * @return готовые метаданные в исходном порядке
      */
     List<AttachmentView> describe(UUID projectId, List<UUID> ids);
+
+    /**
+     * Читает принадлежность готовых удерживаемых изображений без S3 и изменения удержания.
+     *
+     * @param ids опубликованные ID, проверяемые вызывающим владельцем публикаций
+     * @return только готовые изображения назначения JOURNAL
+     */
+    Map<UUID, ImageLocation> journalImages(Set<UUID> ids);
+
+    /**
+     * Принадлежность закрытого изображения без объектного ключа и адреса содержимого.
+     *
+     * @param projectId карточка
+     * @param stageId этап
+     */
+    record ImageLocation(UUID projectId, UUID stageId) {}
 }

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="680" viewBox="0 0 960 680">
+<rect width="960" height="680" fill="#f4f7ef"/><text x="48" y="65" font-family="sans-serif" font-size="27" fill="#214e35">Синтетический пример · инженерные сети</text>
+<rect x="140" y="150" width="680" height="350" rx="14" fill="#e1dfcd" stroke="#87977d" stroke-width="12"/>
+<path d="M170 230 H550 V440 H780 M300 175 V340 H740" fill="none" stroke="#477c9c" stroke-width="22"/>
+<path d="M170 405 H420 V195 H780" fill="none" stroke="#ba7850" stroke-width="26"/>
+<circle cx="420" cy="405" r="23" fill="#ddaa70"/><circle cx="550" cy="230" r="20" fill="#90b7c4"/>
+<rect x="48" y="583" width="864" height="58" rx="12" fill="#e0ebda"/><text x="70" y="619" font-family="sans-serif" font-size="21" fill="#214e35">Демонстрационная иллюстрация. Не подтверждение качества работ.</text>
+</svg>

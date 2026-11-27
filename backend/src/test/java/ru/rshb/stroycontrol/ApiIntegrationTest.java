@@ -3847,4 +3847,335 @@ join construction_contracts c on c.project_id=p.id join construction_proposals d
         assertThat(json(owner.request("GET", root, null, false)).path("calculation").isNull())
                 .isTrue();
     }
+
+    /** Читает точки с фактическим статусом HTTP и запретом кеширования. */
+    JsonNode guidance(Browser browser, String project) throws Exception {
+        var response =
+                browser.request("GET", "/projects/" + project + "/control-gates", null, false);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Cache-Control").orElseThrow())
+                .contains("no-store");
+        return json(response);
+    }
+
+    /** Извлекает точку этапа из группы, сохраняя проверку всех ответов сервера. */
+    JsonNode guidancePoint(Browser browser, String project, String stage) throws Exception {
+        var view = guidance(browser, project);
+        for (var group : view.path("groups"))
+            for (var point : group.path("points"))
+                if (point.path("stageId").asText().equals(stage)) return point;
+        throw new AssertionError("Точка этапа отсутствует");
+    }
+
+    @Test
+    @DisplayName("Новые чтения закрыты от постороннего и не создают профиль при пустом плане")
+    void guidanceAccessAndEmptyPlan() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var other = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        for (var suffix : List.of("control-gates", "construction-profile")) {
+            String path = "/projects/" + id + "/" + suffix;
+            error(other.request("GET", path, null, false), 404, "PROJECT_NOT_FOUND");
+            error(new Browser().request("GET", path, null, false), 401, "AUTH_REQUIRED");
+            error(
+                    owner.request("GET", "/projects/not-a-uuid/" + suffix, null, false),
+                    400,
+                    "VALIDATION_ERROR");
+        }
+        var view = guidance(owner, id);
+        assertThat(view.path("groups").size()).isEqualTo(3);
+        assertThat(view.path("groups").get(2).path("points").get(0).path("reasonCode").asText())
+                .isEqualTo("PREPARATION");
+        var profile =
+                json(
+                        owner.request(
+                                "GET", "/projects/" + id + "/construction-profile", null, false));
+        assertThat(profile.path("areaM2").isNull()).isTrue();
+        assertThat(profile.path("sources").path("areaM2").isNull()).isTrue();
+        assertThat(
+                        jdbc.queryForObject(
+                                "select count(*) from project_construction_profiles where project_id=?",
+                                Integer.class,
+                                UUID.fromString(id)))
+                .isZero();
+        var summary = json(owner.request("GET", "/construction-actions", null, false));
+        assertThat(summary.path("projectCount").asInt()).isZero();
+    }
+
+    @Test
+    @DisplayName("Навигатор различает сдачу, возврат, повторную приёмку и завершение дома")
+    void guidanceAcceptanceLifecycle() throws Exception {
+        var r = readyForAcceptance(false);
+        var w = r.work();
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("SUBMISSION_REQUIRED");
+        var first = submitStage(r, "Демонстрационная сдача");
+        var open = guidancePoint(w.owner, w.project, w.stage);
+        assertThat(open.path("canAct").asBoolean()).isTrue();
+        assertThat(open.path("target").path("submissionId").asText())
+                .isEqualTo(first.path("id").asText());
+        decideStage(r, first, "RETURN", "Уточните результат");
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("CORRECTIONS_REQUIRED");
+        var next = submitStage(r, "Исправления подтверждены");
+        decideStage(r, next, "ACCEPT", null);
+        assertThat(guidancePoint(w.owner, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("STAGE_ACCEPTED");
+        var handover = guidance(w.owner, w.project).path("groups").get(2).path("points").get(0);
+        assertThat(handover.path("reasonCode").asText()).isEqualTo("COMPLETION_REQUIRED");
+        assertThat(handover.path("target").path("stageId").isNull()).isTrue();
+        var root = "/projects/" + w.project + "/completion";
+        var complete = json(w.owner.request("GET", root, null, false));
+        assertThat(
+                        w.owner
+                                .request(
+                                        "POST",
+                                        root,
+                                        Map.of(
+                                                "expectedVersion",
+                                                complete.path("version").asLong(),
+                                                "idempotencyKey",
+                                                UUID.randomUUID()),
+                                        true)
+                                .statusCode())
+                .isEqualTo(200);
+        assertThat(guidance(w.owner, w.project).path("actionablePointCount").asInt()).isZero();
+        assertThat(
+                        json(w.owner.request("GET", "/construction-actions", null, false))
+                                .path("projectCount")
+                                .asInt())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName(
+            "Публикация закрытого изображения снимает действие, PDF и внешний URL его не снимают")
+    void guidancePublishedImages() throws Exception {
+        var w = journalWork(true);
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("EVIDENCE_REQUIRED");
+        var external = journalBody("NOTE", "Внешняя иллюстрация");
+        external.put(
+                "photos",
+                List.of(
+                        Map.of(
+                                "url",
+                                "https://images.example.test/demo.png",
+                                "caption",
+                                "Иллюстрация")));
+        assertThat(w.builder.request("POST", w.root, external, true).statusCode()).isEqualTo(201);
+        var pdf =
+                json(
+                        w.builder.upload(
+                                w.project,
+                                w.stage,
+                                UUID.randomUUID(),
+                                "%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n".getBytes(),
+                                "passport.pdf",
+                                "Паспорт материала",
+                                true));
+        var pdfNote = journalBody("NOTE", "Документ");
+        pdfNote.put("attachmentIds", List.of(pdf.path("id").asText()));
+        assertThat(w.builder.request("POST", w.root, pdfNote, true).statusCode()).isEqualTo(201);
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("EVIDENCE_REQUIRED");
+        var file =
+                json(
+                        w.builder.upload(
+                                w.project,
+                                w.stage,
+                                UUID.randomUUID(),
+                                demoPng(),
+                                "demo.png",
+                                "Синтетический пример",
+                                true));
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("EVIDENCE_REQUIRED");
+        var note = journalBody("NOTE", "Опубликованное подтверждение");
+        note.put("attachmentIds", List.of(file.path("id").asText()));
+        assertThat(w.builder.request("POST", w.root, note, true).statusCode()).isEqualTo(201);
+        assertThat(guidancePoint(w.builder, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("EVIDENCE_PUBLISHED");
+        assertThat(
+                        json(w.builder.request("GET", "/construction-actions", null, false))
+                                .path("projectCount")
+                                .asInt())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("Паспорт читает точную площадь заявки и не обещает срок неполного плана")
+    void guidanceProfileSourcesAndConstraints() throws Exception {
+        var owner = new Browser().account("CUSTOMER");
+        var id = preparationProject(owner);
+        preparationRequest(owner, id, "OWN_FUNDS");
+        var project = UUID.fromString(id);
+        jdbc.update(
+                "insert into project_construction_profiles(project_id,foundation_type) values (?,?)",
+                project,
+                "УШП");
+        var response =
+                owner.request("GET", "/projects/" + id + "/construction-profile", null, false);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        var profile = json(response);
+        assertThat(profile.path("areaM2").decimalValue()).isEqualByComparingTo("80");
+        assertThat(profile.path("foundationType").asText()).isEqualTo("УШП");
+        assertThat(profile.path("wallMaterial").isNull()).isTrue();
+        assertThat(profile.path("plannedFinish").isNull()).isTrue();
+        assertThat(profile.path("sources").path("desiredFinish").asText())
+                .isEqualTo("REQUEST_DRAFT");
+        assertThat(profile.has("desiredBudget")).isFalse();
+        assertThat(profile.has("cadastralNumber")).isFalse();
+        assertThatThrownBy(() ->
+                        jdbc.update(
+                                "update project_construction_profiles set foundation_type=' ' where project_id=?",
+                                project))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbc.update("update house_projects set process_mode='LEGACY' where id=?", project);
+        createStage(owner, id, "Этап без даты");
+        var dated = stagePlan("Этап со сроком", "2027-01-01", "2027-02-01");
+        assertThat(owner.request("POST", "/projects/" + id + "/stages", dated, true).statusCode())
+                .isEqualTo(201);
+        assertThat(
+                        json(owner.request(
+                                        "GET",
+                                        "/projects/" + id + "/construction-profile",
+                                        null,
+                                        false))
+                                .path("plannedFinish")
+                                .isNull())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("Документные права не дают строительную задачу, отзыв команды закрывает чтение")
+    void guidanceTeamPermissionsAndRevocation() throws Exception {
+        var w = journalWork(true);
+        var lawyer = employee("Ольга Юрист");
+        var member = join(w.builder, lawyer, "Юрист");
+        team(w.builder, w.project, List.of(grant(member, true, false)), 0);
+        assertThat(guidance(lawyer, w.project).path("actionablePointCount").asInt()).isZero();
+        assertThat(
+                        json(lawyer.request("GET", "/construction-actions", null, false))
+                                .path("projects")
+                                .isEmpty())
+                .isTrue();
+        team(w.builder, w.project, List.of(grant(member, true, true)), 1);
+        assertThat(guidance(lawyer, w.project).path("actionablePointCount").asInt()).isEqualTo(1);
+        team(w.builder, w.project, List.of(), 2);
+        error(
+                lawyer.request("GET", "/projects/" + w.project + "/control-gates", null, false),
+                404,
+                "PROJECT_NOT_FOUND");
+        assertThat(
+                        json(lawyer.request("GET", "/construction-actions", null, false))
+                                .path("projectCount")
+                                .asInt())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("Противоречивые источники возвращают Problem, а не успешный нулевой счётчик")
+    void guidanceSourceFailure() throws Exception {
+        var r = readyForAcceptance(false);
+        var w = r.work();
+        acceptStage(r);
+        jdbc.update(
+                "update construction_stages set status='IN_PROGRESS',actual_finish=null where id=?",
+                UUID.fromString(w.stage));
+        error(
+                w.owner.request("GET", "/projects/" + w.project + "/control-gates", null, false),
+                500,
+                "GUIDANCE_READ_FAILED");
+        error(
+                w.owner.request("GET", "/construction-actions", null, false),
+                500,
+                "GUIDANCE_READ_FAILED");
+    }
+
+    @Test
+    @DisplayName("Миграция паспорта применяется поверх V12 без изменения её контрольной суммы")
+    void guidanceMigrationFromV12() throws Exception {
+        String schema = "guide_" + UUID.randomUUID().toString().replace("-", "");
+        var config =
+                Flyway.configure()
+                        .dataSource(
+                                POSTGRES.getJdbcUrl(),
+                                POSTGRES.getUsername(),
+                                POSTGRES.getPassword())
+                        .schemas(schema)
+                        .defaultSchema(schema);
+        try {
+            config.target("12").load().migrate();
+            var before =
+                    jdbc.queryForObject(
+                            "select checksum from "
+                                    + schema
+                                    + ".flyway_schema_history where version='12'",
+                            Integer.class);
+            Flyway.configure()
+                    .dataSource(
+                            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                    .schemas(schema)
+                    .defaultSchema(schema)
+                    .load()
+                    .migrate();
+            assertThat(
+                            jdbc.queryForObject(
+                                    "select checksum from "
+                                            + schema
+                                            + ".flyway_schema_history where version='12'",
+                                    Integer.class))
+                    .isEqualTo(before);
+            assertThat(
+                            jdbc.queryForObject(
+                                    "select count(*) from "
+                                            + schema
+                                            + ".project_construction_profiles",
+                                    Integer.class))
+                    .isZero();
+        } finally {
+            jdbc.execute("drop schema " + schema + " cascade");
+        }
+    }
+
+    @Test
+    @DisplayName(
+            "Чтение одновременно с решением приёмки возвращает целый снимок, затем актуальный итог")
+    void guidanceConcurrentReadiness() throws Exception {
+        var r = readyForAcceptance(false);
+        var w = r.work();
+        var submission = submitStage(r, "Готово для проверки снимка");
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var reader =
+                    executor.submit(() -> {
+                        start.await();
+                        for (int i = 0; i < 12; i++) {
+                            var view = guidance(w.owner, w.project);
+                            var foundation = view.path("groups").get(0).path("points").get(0);
+                            var handover = view.path("groups").get(2).path("points").get(0);
+                            if (foundation.path("reasonCode").asText().equals("STAGE_ACCEPTED"))
+                                assertThat(handover.path("acceptedStageCount").asInt())
+                                        .isEqualTo(1);
+                            else {
+                                assertThat(foundation.path("reasonCode").asText())
+                                        .isEqualTo("ACCEPTANCE_OPEN");
+                                assertThat(handover.path("acceptedStageCount").asInt()).isZero();
+                            }
+                        }
+                        return true;
+                    });
+            var writer =
+                    executor.submit(() -> {
+                        start.await();
+                        return decideStage(r, submission, "ACCEPT", null);
+                    });
+            start.countDown();
+            writer.get(15, TimeUnit.SECONDS);
+            assertThat(reader.get(15, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(guidancePoint(w.owner, w.project, w.stage).path("reasonCode").asText())
+                .isEqualTo("STAGE_ACCEPTED");
+    }
 }

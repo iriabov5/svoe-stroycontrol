@@ -1,3 +1,4 @@
+import { gateLink, type ControlGates } from "./guidance";
 import { AcceptancePanel } from "./Acceptance";
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 
@@ -218,9 +219,11 @@ export function StageForm({
 export function StageList({
   project,
   account,
+  guidance,
 }: Readonly<{
   project: Project;
   account: Account;
+  guidance?: ControlGates | null;
 }>) {
   const [stages, setStages] = useState<Stage[] | null>(null);
   const [error, setError] = useState("");
@@ -294,7 +297,17 @@ export function StageList({
     return (
       <ol className="stage-list">
         {stages.map((stage, index) => (
-          <li className="panel stage-row" key={stage.id}>
+          <li
+            className={
+              "panel stage-row" +
+              (guidance?.groups.some((g) =>
+                g.points.some((p) => p.stageId === stage.id && p.canAct),
+              )
+                ? " stage-row-action"
+                : "")
+            }
+            key={stage.id}
+          >
             <span className="stage-number" aria-hidden="true">
               {stage.position.toString().padStart(2, "0")}
             </span>
@@ -313,6 +326,18 @@ export function StageList({
                 {stageDate(stage.plannedFinish)}
               </p>
               <StageTiming stage={stage} />
+              {guidance?.groups
+                .flatMap((g) => g.points)
+                .filter((p) => p.stageId === stage.id && p.canAct && p.target)
+                .map((p) => (
+                  <a
+                    key={p.id}
+                    className="stage-required-action"
+                    href={gateLink(p.target!)}
+                  >
+                    Требуется действие: {p.action?.label}
+                  </a>
+                ))}
             </div>
             {owner && (
               <div

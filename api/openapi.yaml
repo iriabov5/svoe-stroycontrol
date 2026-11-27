@@ -28,6 +28,90 @@ tags:
   - name: Acceptance
     description: Сдача, приёмка, демо-банк и завершение стройки
 paths:
+  /projects/{projectId}/control-gates:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Projects
+      operationId: getControlGates
+      summary: Контрольные точки доступной карточки
+      description: Read-only ответ текущему участнику. Не меняет данные, не является
+        техническим заключением и не раскрывает личные ипотечные сведения.
+      responses:
+        "200":
+          description: Контрольные точки доступной карточки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlGatesView"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "500":
+          description: "GUIDANCE_READ_FAILED: не удалось прочитать согласованное
+            состояние; повторите запрос"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /projects/{projectId}/construction-profile:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Projects
+      operationId: getConstructionProfile
+      summary: Паспорт доступной карточки
+      description: Read-only ответ текущему участнику. Не меняет данные, не является
+        техническим заключением и не раскрывает личные ипотечные сведения.
+      responses:
+        "200":
+          description: Паспорт доступной карточки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionProfile"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "404":
+          $ref: "#/components/responses/ProjectNotFound"
+        "500":
+          description: "GUIDANCE_READ_FAILED: не удалось прочитать согласованное
+            состояние; повторите запрос"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /construction-actions:
+    get:
+      tags:
+        - Projects
+      operationId: getConstructionActions
+      summary: Объекты с действиями текущего участника
+      description: Read-only ответ текущему участнику. Не меняет данные, не является
+        техническим заключением и не раскрывает личные ипотечные сведения.
+      responses:
+        "200":
+          description: Объекты с действиями текущего участника
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConstructionActionsView"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "500":
+          description: "GUIDANCE_READ_FAILED: не удалось прочитать согласованное
+            состояние; повторите запрос"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /auth/csrf:
     get:
       tags:
@@ -4086,6 +4170,7 @@ components:
         code:
           type: string
           enum:
+            - GUIDANCE_READ_FAILED
             - VALIDATION_ERROR
             - EMAIL_ALREADY_EXISTS
             - INVALID_CREDENTIALS
@@ -6078,3 +6163,351 @@ components:
         - calculation
         - plotCheckCurrent
         - calculationCurrent
+
+    ControlGateTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - stageId
+        - section
+        - submissionId
+      properties:
+        projectId: &a1
+          type: string
+          format: uuid
+        stageId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        section:
+          type: string
+          enum:
+            - PROJECT
+            - WORK
+            - JOURNAL
+            - ACCEPTANCE
+            - COMPLETION
+        submissionId:
+          type:
+            - string
+            - "null"
+          format: uuid
+    ControlGateAction:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - label
+      properties:
+        code:
+          type: string
+          enum:
+            - OPEN_START
+            - OPEN_JOURNAL
+            - OPEN_SUBMISSION
+            - OPEN_ACCEPTANCE
+            - OPEN_CORRECTIONS
+            - OPEN_COMPLETION
+        label:
+          type: string
+    ControlGatePoint:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - stageId
+        - title
+        - status
+        - reasonCode
+        - detail
+        - responsibleRole
+        - canAct
+        - action
+        - target
+        - acceptedStageCount
+        - totalStageCount
+      properties:
+        id:
+          type: string
+        stageId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - BLOCKED
+            - WAITING_CONTRACTOR
+            - WAITING_CUSTOMER
+            - COMPLETED
+        reasonCode:
+          type: string
+          enum:
+            - PREPARATION
+            - PREPARATION_CLOSED
+            - CONTRACT_REQUIRED
+            - START_REQUIRED
+            - EVIDENCE_REQUIRED
+            - EVIDENCE_PUBLISHED
+            - SUBMISSION_REQUIRED
+            - ACCEPTANCE_OPEN
+            - CORRECTIONS_REQUIRED
+            - STAGE_ACCEPTED
+            - ACCEPTANCE_REQUIRED
+            - COMPLETION_REQUIRED
+            - PROJECT_COMPLETED
+        detail:
+          type: string
+        responsibleRole:
+          type:
+            - string
+            - "null"
+          enum:
+            - CUSTOMER
+            - CONTRACTOR
+            - null
+        canAct:
+          type: boolean
+        action:
+          anyOf:
+            - $ref: "#/components/schemas/ControlGateAction"
+            - type: "null"
+        target:
+          anyOf:
+            - $ref: "#/components/schemas/ControlGateTarget"
+            - type: "null"
+        acceptedStageCount:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+        totalStageCount:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+    ControlGateGroup:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - title
+        - points
+      properties:
+        key:
+          type: string
+          enum:
+            - FOUNDATION
+            - UTILITIES
+            - HANDOVER
+        title:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlGatePoint"
+    ControlGatesView:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - computedAt
+        - completedAt
+        - groups
+        - primaryPointId
+        - actionablePointCount
+      properties:
+        projectId: *a1
+        computedAt: &a2
+          type: string
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControlGateGroup"
+          minItems: 3
+          maxItems: 3
+        primaryPointId:
+          type:
+            - string
+            - "null"
+        actionablePointCount: &a3
+          type: integer
+          minimum: 0
+    ConstructionActionProject:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - projectName
+        - primaryPointId
+        - target
+      properties:
+        projectId: *a1
+        projectName:
+          type: string
+        primaryPointId:
+          type: string
+        target:
+          $ref: "#/components/schemas/ControlGateTarget"
+    ConstructionActionsView:
+      type: object
+      additionalProperties: false
+      required:
+        - computedAt
+        - projectCount
+        - projects
+      properties:
+        computedAt: *a2
+        projectCount: *a3
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConstructionActionProject"
+    ConstructionProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - areaM2
+        - floors
+        - wallMaterial
+        - foundationType
+        - roofType
+        - plannedFinish
+        - desiredFinish
+        - sources
+      properties:
+        projectId: *a1
+        areaM2:
+          type:
+            - number
+            - "null"
+        floors:
+          type:
+            - integer
+            - "null"
+        wallMaterial:
+          type:
+            - string
+            - "null"
+          maxLength: 120
+        foundationType:
+          type:
+            - string
+            - "null"
+          maxLength: 120
+        roofType:
+          type:
+            - string
+            - "null"
+          maxLength: 120
+        plannedFinish:
+          type:
+            - string
+            - "null"
+          format: date
+        desiredFinish:
+          type:
+            - string
+            - "null"
+          format: date
+        sources:
+          type: object
+          additionalProperties: false
+          required:
+            - areaM2
+            - floors
+            - wallMaterial
+            - foundationType
+            - roofType
+            - plannedFinish
+            - desiredFinish
+          properties:
+            areaM2:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            floors:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            wallMaterial:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            foundationType:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            roofType:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            plannedFinish:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null
+            desiredFinish:
+              type:
+                - string
+                - "null"
+              enum:
+                - REQUEST_DRAFT
+                - REQUEST_SUBMITTED
+                - AGREED_PLAN
+                - LEGACY_PLAN
+                - PROFILE
+                - null

@@ -4,6 +4,70 @@
  */
 
 export interface paths {
+    "/projects/{projectId}/control-gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Контрольные точки доступной карточки
+         * @description Read-only ответ текущему участнику. Не меняет данные, не является техническим заключением и не раскрывает личные ипотечные сведения.
+         */
+        get: operations["getControlGates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/construction-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Паспорт доступной карточки
+         * @description Read-only ответ текущему участнику. Не меняет данные, не является техническим заключением и не раскрывает личные ипотечные сведения.
+         */
+        get: operations["getConstructionProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/construction-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Объекты с действиями текущего участника
+         * @description Read-only ответ текущему участнику. Не меняет данные, не является техническим заключением и не раскрывает личные ипотечные сведения.
+         */
+        get: operations["getConstructionActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/csrf": {
         parameters: {
             query?: never;
@@ -1294,7 +1358,7 @@ export interface components {
             title: string;
             status: number;
             /** @enum {string} */
-            code: "VALIDATION_ERROR" | "EMAIL_ALREADY_EXISTS" | "INVALID_CREDENTIALS" | "AUTH_REQUIRED" | "INVALID_CSRF_TOKEN" | "FORBIDDEN" | "PROJECT_NOT_FOUND" | "CONTRACTOR_NOT_FOUND" | "CONTRACTOR_ALREADY_ASSIGNED" | "UNSUPPORTED_MEDIA_TYPE" | "INVALID_STAGE_DATES" | "STAGE_NOT_FOUND" | "STALE_STAGE_VERSION" | "INVALID_STAGE_TRANSITION" | "PROPOSAL_NOT_FOUND" | "CONTRACT_NOT_FOUND" | "STALE_REQUEST_VERSION" | "STALE_PROPOSAL_VERSION" | "STALE_CONTRACT_VERSION" | "INVALID_PROPOSAL_STATE" | "INVALID_CONTRACT_STATE" | "REQUEST_LOCKED" | "CONTRACTOR_REQUIRED" | "APPROVED_PLAN_LOCKED" | "CONTRACT_REQUIRED" | "BANK_DEMO_UNAVAILABLE" | "IDEMPOTENCY_CONFLICT" | "JOURNAL_ENTRY_NOT_FOUND" | "JOURNAL_STAGE_STATE" | "STALE_JOURNAL_VERSION" | "JOURNAL_ALREADY_RESOLVED" | "PREPARATION_CLOSED" | "REQUEST_ALREADY_REISSUED" | "INVALID_REISSUE_CONTRACTOR" | "PROFILE_REQUIRED" | "STALE_PROFILE_VERSION" | "ORGANIZATION_NOT_FOUND" | "INVITATION_NOT_FOUND" | "STALE_ORGANIZATION_VERSION" | "STALE_TEAM_VERSION" | "MEMBERSHIP_CONFLICT" | "ORGANIZATION_ALREADY_EXISTS" | "INVALID_TEAM_MEMBER" | "CONTRACTOR_PROFILE_REQUIRED" | "ATTACHMENT_NOT_FOUND" | "ATTACHMENT_NOT_READY" | "ATTACHMENT_TOO_LARGE" | "STORAGE_UNAVAILABLE" | "ACCEPTANCE_NOT_FOUND" | "STALE_ACCEPTANCE_VERSION" | "INVALID_ACCEPTANCE_STATE" | "CONSTRUCTION_NOT_READY" | "CONSTRUCTION_COMPLETED" | "BANK_CASE_REQUIRED" | "STALE_BANK_VERSION" | "INVALID_BANK_SUBMISSION_STATE" | "STALE_FINANCING_PLAN";
+            code: "GUIDANCE_READ_FAILED" | "VALIDATION_ERROR" | "EMAIL_ALREADY_EXISTS" | "INVALID_CREDENTIALS" | "AUTH_REQUIRED" | "INVALID_CSRF_TOKEN" | "FORBIDDEN" | "PROJECT_NOT_FOUND" | "CONTRACTOR_NOT_FOUND" | "CONTRACTOR_ALREADY_ASSIGNED" | "UNSUPPORTED_MEDIA_TYPE" | "INVALID_STAGE_DATES" | "STAGE_NOT_FOUND" | "STALE_STAGE_VERSION" | "INVALID_STAGE_TRANSITION" | "PROPOSAL_NOT_FOUND" | "CONTRACT_NOT_FOUND" | "STALE_REQUEST_VERSION" | "STALE_PROPOSAL_VERSION" | "STALE_CONTRACT_VERSION" | "INVALID_PROPOSAL_STATE" | "INVALID_CONTRACT_STATE" | "REQUEST_LOCKED" | "CONTRACTOR_REQUIRED" | "APPROVED_PLAN_LOCKED" | "CONTRACT_REQUIRED" | "BANK_DEMO_UNAVAILABLE" | "IDEMPOTENCY_CONFLICT" | "JOURNAL_ENTRY_NOT_FOUND" | "JOURNAL_STAGE_STATE" | "STALE_JOURNAL_VERSION" | "JOURNAL_ALREADY_RESOLVED" | "PREPARATION_CLOSED" | "REQUEST_ALREADY_REISSUED" | "INVALID_REISSUE_CONTRACTOR" | "PROFILE_REQUIRED" | "STALE_PROFILE_VERSION" | "ORGANIZATION_NOT_FOUND" | "INVITATION_NOT_FOUND" | "STALE_ORGANIZATION_VERSION" | "STALE_TEAM_VERSION" | "MEMBERSHIP_CONFLICT" | "ORGANIZATION_ALREADY_EXISTS" | "INVALID_TEAM_MEMBER" | "CONTRACTOR_PROFILE_REQUIRED" | "ATTACHMENT_NOT_FOUND" | "ATTACHMENT_NOT_READY" | "ATTACHMENT_TOO_LARGE" | "STORAGE_UNAVAILABLE" | "ACCEPTANCE_NOT_FOUND" | "STALE_ACCEPTANCE_VERSION" | "INVALID_ACCEPTANCE_STATE" | "CONSTRUCTION_NOT_READY" | "CONSTRUCTION_COMPLETED" | "BANK_CASE_REQUIRED" | "STALE_BANK_VERSION" | "INVALID_BANK_SUBMISSION_STATE" | "STALE_FINANCING_PLAN";
             detail?: string;
             /** @description Сообщения по именам полей API */
             fieldErrors?: {
@@ -2075,6 +2139,98 @@ export interface components {
             plotCheckCurrent: boolean;
             calculationCurrent: boolean;
         };
+        ControlGateTarget: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            stageId: string | null;
+            /** @enum {string} */
+            section: "PROJECT" | "WORK" | "JOURNAL" | "ACCEPTANCE" | "COMPLETION";
+            /** Format: uuid */
+            submissionId: string | null;
+        };
+        ControlGateAction: {
+            /** @enum {string} */
+            code: "OPEN_START" | "OPEN_JOURNAL" | "OPEN_SUBMISSION" | "OPEN_ACCEPTANCE" | "OPEN_CORRECTIONS" | "OPEN_COMPLETION";
+            label: string;
+        };
+        ControlGatePoint: {
+            id: string;
+            /** Format: uuid */
+            stageId: string | null;
+            title: string;
+            /** @enum {string} */
+            status: "BLOCKED" | "WAITING_CONTRACTOR" | "WAITING_CUSTOMER" | "COMPLETED";
+            /** @enum {string} */
+            reasonCode: "PREPARATION" | "PREPARATION_CLOSED" | "CONTRACT_REQUIRED" | "START_REQUIRED" | "EVIDENCE_REQUIRED" | "EVIDENCE_PUBLISHED" | "SUBMISSION_REQUIRED" | "ACCEPTANCE_OPEN" | "CORRECTIONS_REQUIRED" | "STAGE_ACCEPTED" | "ACCEPTANCE_REQUIRED" | "COMPLETION_REQUIRED" | "PROJECT_COMPLETED";
+            detail: string;
+            /** @enum {string|null} */
+            responsibleRole: "CUSTOMER" | "CONTRACTOR" | null;
+            canAct: boolean;
+            action: components["schemas"]["ControlGateAction"] | null;
+            target: components["schemas"]["ControlGateTarget"] | null;
+            acceptedStageCount: number | null;
+            totalStageCount: number | null;
+        };
+        ControlGateGroup: {
+            /** @enum {string} */
+            key: "FOUNDATION" | "UTILITIES" | "HANDOVER";
+            title: string;
+            points: components["schemas"]["ControlGatePoint"][];
+        };
+        ControlGatesView: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: date-time */
+            computedAt: string;
+            /** Format: date-time */
+            completedAt: string | null;
+            groups: components["schemas"]["ControlGateGroup"][];
+            primaryPointId: string | null;
+            actionablePointCount: number;
+        };
+        ConstructionActionProject: {
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            primaryPointId: string;
+            target: components["schemas"]["ControlGateTarget"];
+        };
+        ConstructionActionsView: {
+            /** Format: date-time */
+            computedAt: string;
+            projectCount: number;
+            projects: components["schemas"]["ConstructionActionProject"][];
+        };
+        ConstructionProfile: {
+            /** Format: uuid */
+            projectId: string;
+            areaM2: number | null;
+            floors: number | null;
+            wallMaterial: string | null;
+            foundationType: string | null;
+            roofType: string | null;
+            /** Format: date */
+            plannedFinish: string | null;
+            /** Format: date */
+            desiredFinish: string | null;
+            sources: {
+                /** @enum {string|null} */
+                areaM2: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                floors: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                wallMaterial: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                foundationType: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                roofType: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                plannedFinish: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+                /** @enum {string|null} */
+                desiredFinish: "REQUEST_DRAFT" | "REQUEST_SUBMITTED" | "AGREED_PLAN" | "LEGACY_PLAN" | "PROFILE" | null;
+            };
+        };
     };
     responses: {
         /** @description VALIDATION_ERROR — неверный JSON, поле или параметр. */
@@ -2161,6 +2317,104 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getControlGates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контрольные точки доступной карточки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlGatesView"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["AuthRequired"];
+            404: components["responses"]["ProjectNotFound"];
+            /** @description GUIDANCE_READ_FAILED: не удалось прочитать согласованное состояние; повторите запрос */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getConstructionProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Паспорт доступной карточки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstructionProfile"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["AuthRequired"];
+            404: components["responses"]["ProjectNotFound"];
+            /** @description GUIDANCE_READ_FAILED: не удалось прочитать согласованное состояние; повторите запрос */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getConstructionActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Объекты с действиями текущего участника */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstructionActionsView"];
+                };
+            };
+            401: components["responses"]["AuthRequired"];
+            /** @description GUIDANCE_READ_FAILED: не удалось прочитать согласованное состояние; повторите запрос */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getCsrfToken: {
         parameters: {
             query?: never;

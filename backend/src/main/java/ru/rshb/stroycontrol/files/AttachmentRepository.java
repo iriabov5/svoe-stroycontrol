@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Хранит собственные метаданные файлов и сериализует удержание с очисткой. */
@@ -53,4 +54,17 @@ interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
     order by a.createdAt
 """)
     List<UUID> cleanupCandidates(Instant before, Pageable pageable);
+
+    /**
+     * Возвращает только реальные опубликованные изображения журнала.
+     *
+     * @param ids ссылки из публикаций
+     * @return готовые удерживаемые изображения
+     */
+    @Query(
+            """
+            select a from Attachment a where a.id in :ids and a.retained=true
+            and a.state='READY' and a.purpose='JOURNAL' and a.contentType like 'image/%'
+            """)
+    List<Attachment> journalImages(Set<UUID> ids);
 }

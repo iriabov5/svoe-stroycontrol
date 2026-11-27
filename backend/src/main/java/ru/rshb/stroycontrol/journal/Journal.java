@@ -6,6 +6,7 @@ import ru.rshb.stroycontrol.files.AttachmentView;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,4 +40,12 @@ public interface Journal {
             ActorSnapshot authorSnapshot,
             Instant createdAt,
             List<AttachmentView> attachments) {}
+
+    /**
+     * Находит этапы с опубликованной NOTE и настоящим закрытым изображением.
+     *
+     * @param projects авторизованные карточки в активной транзакции
+     * @return этапы с подтверждениями без текстов и адресов файлов
+     */
+    Set<UUID> confirmedStages(Set<UUID> projects);
 }

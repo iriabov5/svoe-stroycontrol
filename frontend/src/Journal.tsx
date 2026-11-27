@@ -160,7 +160,11 @@ export function Journal({
     return "Здесь появятся записи подрядчика о работах и вопросы для вас.";
   }
   return (
-    <section className="panel journal" aria-labelledby="journal-heading">
+    <section
+      className="panel journal"
+      aria-labelledby="journal-heading"
+      data-journal-loaded={data ? "true" : "false"}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Общий журнал этапа</p>

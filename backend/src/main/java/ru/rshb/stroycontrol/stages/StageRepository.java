@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Хранит этапы своего модуля; принадлежность карточке проверяется вместе с ID этапа. */
@@ -28,4 +29,12 @@ interface StageRepository extends JpaRepository<ConstructionStage, UUID> {
      * @return найденный объект либо пустой Optional
      */
     Optional<ConstructionStage> findByIdAndProjectId(UUID id, UUID projectId);
+
+    /**
+     * Читает планы набором без запроса для каждого этапа.
+     *
+     * @param projects авторизованные карточки
+     * @return этапы в порядке плана
+     */
+    List<ConstructionStage> findByProjectIdInOrderByPositionAscIdAsc(Set<UUID> projects);
 }

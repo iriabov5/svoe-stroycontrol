@@ -66,6 +66,7 @@ export function CompletionPanel({
   return (
     <section
       className="panel completion-panel"
+      data-completion-loaded={data ? "true" : "false"}
       aria-labelledby="completion-title"
     >
       <div>

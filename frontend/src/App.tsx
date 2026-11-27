@@ -1,3 +1,5 @@
+import { ConstructionActionsIndicator } from "./ConstructionGuide";
+import { useTargetFocus } from "./guidance";
 import { BrandMark } from "./BrandMark";
 import { useEffect, useState, useRef } from "react";
 import { api, ApiError, errorMessage, type Account } from "./api/client";
@@ -113,8 +115,11 @@ export function App() {
       setLoggingOut(false);
     }
   }
-  const detail = /^\/projects\/([^/?]+)(\?created)?$/.exec(route);
-  const stageRoute = /^\/projects\/([^/?]+)\/stages\/([^/?]+)$/.exec(route);
+  useTargetFocus(route);
+  const routePath = route.split("?")[0];
+  const routeParams = new URLSearchParams(route.split("?")[1] ?? "");
+  const detail = /^\/projects\/([^/?]+)$/.exec(routePath);
+  const stageRoute = /^\/projects\/([^/?]+)\/stages\/([^/?]+)$/.exec(routePath);
   function renderPage() {
     if (loading) {
       return <Notice>Проверяем сессию…</Notice>;
@@ -162,7 +167,7 @@ export function App() {
           key={detail[1]}
           id={detail[1]}
           account={account}
-          created={Boolean(detail[2])}
+          created={routeParams.has("created")}
         />
       );
     }
@@ -206,6 +211,7 @@ export function App() {
           </div>
           {account ? (
             <div className="account-bar">
+              <ConstructionActionsIndicator key={account.id} />
               <div>
                 <a
                   className="account-email profile-link"

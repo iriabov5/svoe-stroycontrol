@@ -61,9 +61,17 @@ export async function request<T>(
       problem?.fieldErrors ?? {},
     );
   }
-  return response.status === 204
-    ? (undefined as T)
-    : (response.json() as Promise<T>);
+  const result =
+    response.status === 204
+      ? (undefined as T)
+      : await (response.json() as Promise<T>);
+  notifyConstructionChange(method, path);
+  return result;
+}
+
+function notifyConstructionChange(method: string, path: string) {
+  if (method !== "GET" && !path.startsWith("/auth/"))
+    window.dispatchEvent(new Event("construction-changed"));
 }
 
 export const api = {

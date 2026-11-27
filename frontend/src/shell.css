@@ -1318,6 +1318,8 @@ legend {
 .participant-overview {
   margin-bottom: 1.5rem;
   align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 .contractor-details,
 .invite-form {
@@ -1983,4 +1985,132 @@ fieldset.journal-filters {
   .financing-planning .payment-panel {
     padding: 1rem;
   }
+}
+
+/* Навигатор в общей карточке использует существующие поверхности и акцент. */
+.construction-guide,
+.construction-profile {
+  margin: 24px 0;
+}
+.control-point {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 14px 0;
+}
+.control-point-primary {
+  border-left: 4px solid var(--green);
+  background: #f5f9f1;
+}
+.control-point h3,
+.control-point h4 {
+  margin: 12px 0;
+}
+.control-point .button {
+  display: inline-block;
+}
+.control-groups summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 12px 0;
+}
+.construction-profile dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.construction-profile dd {
+  margin: 6px 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.construction-profile dl .hint {
+  font-size: 0.75rem;
+  margin: 4px 0;
+}
+.construction-actions-indicator {
+  border: 1px solid #9e741a;
+  background: #fff7df;
+  color: #5c430c;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.actions-unavailable {
+  max-width: 220px;
+  font-size: 0.75rem;
+}
+.stage-row-action {
+  border-left: 4px solid #9e741a;
+}
+.stage-required-action {
+  display: block;
+  margin-top: 12px;
+  color: #5c430c;
+  font-weight: 700;
+}
+@media (max-width: 650px) {
+  .construction-profile dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .account-bar {
+    flex-wrap: wrap;
+  }
+  .construction-actions-indicator {
+    font-size: 0.75rem;
+    padding: 6px 8px;
+  }
+  .control-point {
+    padding: 16px;
+  }
+  .control-point .button {
+    white-space: normal;
+    max-width: 100%;
+  }
+}
+
+.participant-overview .panel {
+  padding: 24px;
+}
+.participant-overview .construction-profile {
+  margin: 0;
+}
+.participant-overview .construction-profile dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1000px) {
+  .participant-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 650px) {
+  .participant-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+.construction-profile dd .hint {
+  display: block;
+  font-weight: 400;
+}
+
+.control-point > a {
+  transition: none;
+}
+
+.control-point > a:not(.button) {
+  color: #214e35;
+}
+
+/* Обновление проекций не снижает контраст доступных для чтения сведений. */
+.construction-guide[aria-busy="true"],
+.construction-profile[aria-busy="true"] {
+  opacity: 1;
+}
+
+.guidance-update {
+  display: block;
+  margin: 1em 0;
 }
